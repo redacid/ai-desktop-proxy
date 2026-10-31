@@ -86,7 +86,37 @@ export function parsePonytailGain(markdown: string): ToolStats | null {
   const facts = [...markdown.matchAll(/^\s+(\S.*?\S)\s{2,}[█·]+\s+\d+%\s+▼\s*(\d+%)\s*$/gm)]
     .map((m) => ({ label: `less ${m[1].toLowerCase()}`, value: m[2] }))
   const bench = /^\s+ponytail gain\s+(.+?)\s*$/m.exec(markdown)?.[1]
-  return facts.length ? { source: `published benchmark${bench ? ` (${bench})` : ''}; Ponytail records nothing locally`, facts, daily: [] } : null
+  return facts.length ? { source: `published benchmark${bench ? ` (${bench})` : ''}; no local band ledger yet`, facts, daily: [] } : null
+}
+
+/** One CSV line: comma separated, double-quoted fields with "" escapes. */
+export function csvFields(line: string): string[] {
+  return [...line.matchAll(/(?:^|,)(?:"((?:[^"]|"")*)"|([^,]*))/g)].map((m) => m[1]?.replace(/""/g, '"') ?? m[2])
+}
+
+/** Ponytail band's per-project session ledgers (cost, tokens, turns, agent time per Claude Code session). */
+export function parsePonytailBand(csvs: string[]): ToolStats | null {
+  let sessions = 0, cost = 0, tokens = 0, turns = 0, minutes = 0
+  for (const text of csvs) {
+    const [header, ...rows] = text.split('\n').filter(Boolean).map(csvFields)
+    const col = (row: string[], name: string): number => Number(row[header.indexOf(name)]) || 0
+    for (const row of rows) {
+      sessions++
+      cost += col(row, 'cost_usd'); tokens += col(row, 'tokens_total'); turns += col(row, 'turns'); minutes += col(row, 'agent_minutes')
+    }
+  }
+  if (!sessions) return null
+  const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
+  return {
+    source: `Ponytail band ledger, ${sessions} Claude Code session${sessions === 1 ? '' : 's'} on this machine`,
+    facts: [
+      { label: 'cost', value: `$${cost.toFixed(2)}` },
+      { label: 'tokens', value: compact.format(tokens) },
+      { label: 'turns', value: int.format(turns) },
+      { label: 'agent time', value: `${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m` }
+    ],
+    daily: []
+  }
 }
 
 export interface Command { cmd: string; args: string[] }
@@ -106,6 +136,8 @@ const emptyUpdate = (): UpdateEntry => ({ latest: null, checkedAt: null, error: 
 export interface ToolDependencies {
   root: string
   home: string
+  /** XDG config dir, where Ponytail band keeps its ledger; defaults to ~/.config. */
+  configHome?: string
   arch?: string
   runner?: Runner
   stream?: typeof runStreaming
@@ -273,7 +305,12 @@ export class ToolManager extends EventEmitter {
     return r.code === 0 ? rtkConnected(r.stdout, codex) : null
   }
 
+  /** The band ledger when Ponytail has recorded sessions, otherwise its published benchmark. */
   private async ponytailStats(version: string | null): Promise<ToolStats | null> {
+    const band = join(this.deps.configHome ?? join(this.deps.home, '.config'), 'ponytail', 'band')
+    const files = await fs.readdir(band).catch(() => [] as string[])
+    const ledger = parsePonytailBand(await Promise.all(files.filter((f) => f.endsWith('.csv')).map((f) => fs.readFile(join(band, f), 'utf8').catch(() => ''))))
+    if (ledger) return ledger
     if (!version) return null
     const skill = join(this.deps.home, '.claude', 'plugins', 'cache', 'ponytail', 'ponytail', version, 'skills', 'ponytail-gain', 'SKILL.md')
     try { return parsePonytailGain(await fs.readFile(skill, 'utf8')) } catch { return null }

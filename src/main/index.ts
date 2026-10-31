@@ -44,7 +44,7 @@ const store = new AppStore(join(app.getPath('userData'), 'state.json'))
 const headroom = (): HeadroomBackend => new HeadroomBackend(store.settings.headroomUrl)
 const headroomService = new HeadroomService(() => store.settings, () => headroom().answering())
 const tools = new ToolManager({
-  root: app.getPath('userData'), home: homedir(),
+  root: app.getPath('userData'), home: homedir(), configHome: process.env.XDG_CONFIG_HOME || undefined,
   headroomInfo: () => headroomService.info(), setupHeadroom: () => headroomService.setup()
 })
 const proxy = new ProxyManager(() => store.settings, {

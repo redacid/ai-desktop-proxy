@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CompressorInfo } from '@shared/ipc'
-import { approveToolAction, binaryVersion, extractRtk, newerVersion, officialPonytailSource, parsePonytailGain, parseRtkGain, rtkConnected, ponytailInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
+import { approveToolAction, binaryVersion, extractRtk, newerVersion, officialPonytailSource, parsePonytailBand, parsePonytailGain, parseRtkGain, rtkConnected, ponytailInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
 
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))) })
@@ -367,7 +367,7 @@ describe('tool stats', () => {
     ].join('\n')
     const stats = parsePonytailGain(md)!
     expect(stats.facts).toEqual([{ label: 'less lines of code', value: '53%' }, { label: 'less output tokens', value: '45%' }])
-    expect(stats.source).toMatch(/benchmark · 39 tasks.*nothing locally/)
+    expect(stats.source).toMatch(/benchmark · 39 tasks.*no local band ledger/)
     expect(parsePonytailGain('no scoreboard')).toBeNull()
   })
 })
@@ -398,5 +398,23 @@ describe('rtkConnected', () => {
   it('treats a partial setup as not connected and unknown output as unknown', () => {
     expect(rtkConnected(claude.replace('[ok] settings.json', '[--] settings.json'), false)).toBe(false)
     expect(rtkConnected('something else', false)).toBeNull()
+  })
+})
+
+describe('parsePonytailBand', () => {
+  const header = 'key,started,project,name,cost_usd,turns,agent_minutes,tokens_total,tokens_output,reuse_pct,reused,new,callers_open,tests,level,model'
+  it('sums every session across project ledgers, with quoted names', () => {
+    const stats = parsePonytailBand([
+      `${header}\na-1,2026-10-31 13:26,p,"say ""hi"", then go",11.94,8,1.0,1084738,1145,,0,0,0,not run,full,m\n`,
+      `${header}\nb-2,2026-10-31 09:22,q,plain,5.07,9,80.3,6972369,47132,,0,0,0,not run,full,m\n`
+    ])!
+    expect(stats.facts).toEqual([
+      { label: 'cost', value: '$17.01' },
+      { label: 'tokens', value: '8.1M' },
+      { label: 'turns', value: '17' },
+      { label: 'agent time', value: '1h 21m' }
+    ])
+    expect(stats.source).toMatch(/2 Claude Code sessions/)
+    expect(parsePonytailBand([header])).toBeNull()
   })
 })

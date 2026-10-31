@@ -132,10 +132,11 @@ Each card also shows what the tool achieved, refreshed with the presence check:
 
 - **RTK:** tokens saved, average saving and commands filtered, plus tokens saved per day for the last 14 days,
   from `rtk gain --daily --format json`. These are RTK's own local records on this machine.
-- **Ponytail · Claude Code:** the figures from the installed plugin's `ponytail-gain` skill (less lines of code,
-  output tokens, cost, time). They are Ponytail's published benchmark, not measurements of your sessions:
-  Ponytail records nothing locally. The Codex card shows none, because the figures are read from Claude Code's
-  plugin cache.
+- **Ponytail:** totals from Ponytail's own band ledger (`$XDG_CONFIG_HOME/ponytail/band/*.csv`, default
+  `~/.config/ponytail/band`): cost, tokens, turns and agent time over every Claude Code session it recorded,
+  the same figures as its band in Claude Code. They show what the sessions used, not what Ponytail saved.
+  Until the ledger has a session, the card shows the published benchmark from the installed plugin's
+  `ponytail-gain` skill instead (less lines of code, output tokens, cost, time), labelled as such.
 
 Version sources are PyPI (`headroom-ai`), GitHub Releases (`rtk-ai/rtk`), and the official Ponytail plugin
 manifest. GitHub rate limits, an offline machine, or unsupported client CLI output can prevent a check;
