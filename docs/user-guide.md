@@ -89,7 +89,8 @@ puts it back once the service holds the port again. A proxy restart therefore ta
 
 ### Tools & updates
 
-This section checks headroom, RTK, and the official Ponytail plugin separately for Claude Code and Codex.
+This section checks headroom, RTK, the Ponytail and Chisle plugins, and the Serena and MarkItDown MCP servers, per client
+where it applies (Claude Code, Codex).
 Installation presence is checked at startup and every minute while the app runs. New stable versions are
 checked at startup when the cached result is older than six hours, then every six hours. **Check for updates**
 forces a fresh check. The cadence survives app restarts. A failed check shows an error and keeps the last
@@ -128,6 +129,20 @@ appear in the Install log. Missing optional tools do not turn the proxy's health
   switch per client: on installs it, off uninstalls it with the client's own command
   (`claude plugin uninstall ponytail@ponytail --scope user`, `codex plugin remove ponytail@ponytail`).
 
+- **Chisle:** a Claude Code plugin handled like Ponytail, from the official `JayPokale/Chisle` marketplace
+  (`chisle@chisle`), with the same card and per-client switch. Chisle has no Codex plugin (its Codex setup is an
+  `npx chisle` run that edits `~/.codex/AGENTS.md`), so the app offers it for Claude Code only. Chisle and
+  Ponytail both set a terse "lazy senior developer" style; running both doubles those instructions.
+- **Serena, MarkItDown:** MCP servers, so there is nothing to install besides `uv`. A switch per client
+  registers the server at user scope with the client's own command, run by uvx from a pinned PyPI release:
+  `claude mcp add --scope user serena -- uvx --python 3.13 --from serena-agent==<version> serena start-mcp-server
+  --context claude-code --project-from-cwd` (`--context codex` for Codex), and `markitdown-mcp==<version>
+  markitdown-mcp` for MarkItDown. Switching off runs `claude mcp remove --scope user <name>` or
+  `codex mcp remove <name>`. **Update** re-registers the new pin in every client the app connected. A server
+  with the same name that the app did not add (another command, or no pin) shows **set up elsewhere** and is
+  never changed. State is read from `~/.claude.json` (`mcpServers`) and `$CODEX_HOME/config.toml`
+  (`mcp_servers`). uvx downloads the release on the client's next start.
+
 Each card also shows what the tool achieved, refreshed with the presence check:
 
 - **RTK:** tokens saved, average saving and commands filtered, plus tokens saved per day for the last 14 days,
@@ -138,8 +153,12 @@ Each card also shows what the tool achieved, refreshed with the presence check:
   Until the ledger has a session, the card shows the published benchmark from the installed plugin's
   `ponytail-gain` skill instead (less lines of code, output tokens, cost, time), labelled as such.
 
-Version sources are PyPI (`headroom-ai`), GitHub Releases (`rtk-ai/rtk`), and the official Ponytail plugin
-manifest. GitHub rate limits, an offline machine, or unsupported client CLI output can prevent a check;
+- **Chisle:** characters its compress-output hook elided from tool output, an estimate of tokens (characters ÷ 4),
+  and how many outputs it compressed, from `~/.claude/.chisle-compress-stats.json`.
+- **Serena, MarkItDown:** none; Serena keeps its tool-usage statistics only in a running server's dashboard.
+
+Version sources are PyPI (`headroom-ai`, `serena-agent`, `markitdown-mcp`), GitHub Releases (`rtk-ai/rtk`), and
+the official Ponytail and Chisle plugin manifests. GitHub rate limits, an offline machine, or unsupported client CLI output can prevent a check;
 the error is shown without attempting an installation. After a partial native-command failure, review
 the log: earlier steps may already have completed. Tool versions and installation paths are distinct
 from a running headroom process's version until that process is restarted.

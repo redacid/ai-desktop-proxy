@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CompressorInfo } from '@shared/ipc'
-import { approveToolAction, binaryVersion, extractRtk, newerVersion, officialPonytailSource, parsePonytailBand, parsePonytailGain, parseRtkGain, rtkConnected, ponytailInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
+import { approveToolAction, binaryVersion, extractRtk, newerVersion, officialSource, mcpPin, parseChisleStats, parsePonytailBand, parsePonytailGain, parseRtkGain, rtkConnected, pluginInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
 
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))) })
@@ -89,18 +89,18 @@ describe('version and source handling', () => {
   })
 
   it('recognizes only the official marketplace source', () => {
-    expect(officialPonytailSource({ repo: 'DietrichGebert/ponytail' })).toBe(true)
-    expect(officialPonytailSource({ marketplaceSource: { source: 'https://github.com/DietrichGebert/ponytail.git' } })).toBe(true)
-    expect(officialPonytailSource({ repo: 'attacker/DietrichGebert/ponytail' })).toBe(false)
-    expect(officialPonytailSource({ repo: 'https://github.com/DietrichGebert/ponytail.evil' })).toBe(false)
+    expect(officialSource({ repo: 'DietrichGebert/ponytail' }, 'DietrichGebert/ponytail')).toBe(true)
+    expect(officialSource({ marketplaceSource: { source: 'https://github.com/DietrichGebert/ponytail.git' } }, 'DietrichGebert/ponytail')).toBe(true)
+    expect(officialSource({ repo: 'attacker/DietrichGebert/ponytail' }, 'DietrichGebert/ponytail')).toBe(false)
+    expect(officialSource({ repo: 'https://github.com/DietrichGebert/ponytail.evil' }, 'DietrichGebert/ponytail')).toBe(false)
   })
 
   it('distinguishes native installed lists from catalogs and unknown schemas', () => {
-    expect(ponytailInfo({ installed: [], available: [{ pluginId: 'ponytail@ponytail' }] }, true).installed).toBe(false)
-    expect(ponytailInfo([{ id: 'ponytail@other', version: '5.3.0' }], false).installed).toBe(false)
-    expect(ponytailInfo([{ id: 'ponytail@ponytail', scope: 'project' }], false).installed).toBe(false)
-    expect(ponytailInfo([{ id: 'ponytail@ponytail', scope: 'user', version: '5.3.0', enabled: false }], false)).toEqual({ installed: true, version: '5.3.0', enabled: false })
-    expect(() => ponytailInfo({}, true)).toThrow(/Unrecognized/)
+    expect(pluginInfo({ installed: [], available: [{ pluginId: 'ponytail@ponytail' }] }, true, 'ponytail@ponytail').installed).toBe(false)
+    expect(pluginInfo([{ id: 'ponytail@other', version: '5.3.0' }], false, 'ponytail@ponytail').installed).toBe(false)
+    expect(pluginInfo([{ id: 'ponytail@ponytail', scope: 'project' }], false, 'ponytail@ponytail').installed).toBe(false)
+    expect(pluginInfo([{ id: 'ponytail@ponytail', scope: 'user', version: '5.3.0', enabled: false }], false, 'ponytail@ponytail')).toEqual({ installed: true, version: '5.3.0', enabled: false })
+    expect(() => pluginInfo({}, true, 'ponytail@ponytail')).toThrow(/Unrecognized/)
   })
 })
 
@@ -127,17 +127,18 @@ describe('tool detection and update cadence', () => {
     expect(f.setup).not.toHaveBeenCalled()
   })
 
+  // Six update sources: headroom, RTK, Ponytail, Chisle, Serena, MarkItDown.
   it('throttles network checks, shares in-flight work, and supports a forced check', async () => {
     const f = await fixture()
     await Promise.all([f.manager.refresh(), f.manager.refresh()])
-    expect(f.request).toHaveBeenCalledTimes(3)
-    await f.manager.refresh()
-    expect(f.request).toHaveBeenCalledTimes(3)
-    f.state.now += UPDATE_INTERVAL_MS
+    expect(f.request).toHaveBeenCalledTimes(6)
     await f.manager.refresh()
     expect(f.request).toHaveBeenCalledTimes(6)
+    f.state.now += UPDATE_INTERVAL_MS
+    await f.manager.refresh()
+    expect(f.request).toHaveBeenCalledTimes(12)
     await f.manager.refresh(true)
-    expect(f.request).toHaveBeenCalledTimes(9)
+    expect(f.request).toHaveBeenCalledTimes(18)
     expect(f.stream).not.toHaveBeenCalled()
   })
 
@@ -145,7 +146,7 @@ describe('tool detection and update cadence', () => {
     const f = await fixture()
     await f.manager.refresh()
     const restarted = new ToolManager(f.deps)
-    try { await restarted.start(); expect(f.request).toHaveBeenCalledTimes(3) }
+    try { await restarted.start(); expect(f.request).toHaveBeenCalledTimes(6) }
     finally { restarted.stop() }
   })
 
@@ -156,7 +157,7 @@ describe('tool detection and update cadence', () => {
     const tools = await f.manager.refresh(true)
     expect(tools[0]).toMatchObject({ installed: true, latest: '0.41.0', error: expect.stringContaining('offline') })
     await f.manager.refresh()
-    expect(f.request).toHaveBeenCalledTimes(6)
+    expect(f.request).toHaveBeenCalledTimes(12)
   })
 
   it('does not offer installation on a detection failure', async () => {
@@ -416,5 +417,45 @@ describe('parsePonytailBand', () => {
     ])
     expect(stats.source).toMatch(/2 Claude Code sessions/)
     expect(parsePonytailBand([header])).toBeNull()
+  })
+})
+
+describe('MCP servers and Chisle', () => {
+  it('recognizes only uvx registrations pinned to the package', () => {
+    expect(mcpPin({ command: '/u/.local/bin/uvx', args: ['--python', '3.13', '--from', 'serena-agent==2.1.0', 'serena'] }, 'serena-agent')).toBe('2.1.0')
+    expect(mcpPin({ command: 'uvx', args: ['--from', 'markitdown-mcp==0.0.1a8', 'markitdown-mcp'] }, 'markitdown-mcp')).toBe('0.0.1a8')
+    expect(mcpPin({ command: 'uvx', args: ['--from', 'git+https://github.com/oraios/serena', 'serena'] }, 'serena-agent')).toBeNull()
+    expect(mcpPin({ command: 'npx', args: ['--from', 'serena-agent==2.1.0'] }, 'serena-agent')).toBeNull()
+    expect(mcpPin({ command: 'uvx', args: ['--from', 'serena-agent==2.1.0;rm'] }, 'serena-agent')).toBeNull()
+  })
+
+  it('reads chisle compress stats', () => {
+    expect(parseChisleStats({ savedChars: 40_000, events: 12 })!.facts.map((f) => f.value)).toEqual(['40,000', '10,000', '12'])
+    expect(parseChisleStats({})).toBeNull()
+  })
+
+  it('connects Serena at user scope with a pinned uvx command, and leaves a foreign one alone', async () => {
+    const f = await fixture()
+    const home = join(f.root, 'home')
+    await fs.mkdir(join(home, '.codex'), { recursive: true })
+    await fs.writeFile(join(home, '.codex', 'config.toml'), '[mcp_servers.serena]\ncommand = "serena-mcp"\n')
+    const serena = (await f.manager.refresh(true)).find((t) => t.id === 'serena')!
+    expect(serena).toMatchObject({ installed: true, version: null, latest: '0.41.0', connected: { claude: false, codex: true }, foreign: { claude: false, codex: true } })
+
+    const plan = await f.manager.plan('serena', 'connect-claude')
+    expect(plan.commands).toEqual([{ cmd: '/fake/claude', args: ['mcp', 'add', '--scope', 'user', 'serena', '--',
+      '/fake/uvx', '--python', '3.13', '--from', 'serena-agent==0.41.0', 'serena', 'start-mcp-server', '--context', 'claude-code', '--project-from-cwd'] }])
+    await expect(f.manager.plan('serena', 'disconnect-codex')).rejects.toThrow(/did not add/)
+    await expect(f.manager.plan('serena', 'install')).rejects.toThrow()
+  })
+
+  it('plans Chisle like Ponytail, from its own marketplace', async () => {
+    const f = await fixture()
+    f.state.marketplace = false
+    const plan = await f.manager.plan('chisle-claude', 'install')
+    expect(plan.commands).toEqual([
+      { cmd: '/fake/claude', args: ['plugin', 'marketplace', 'add', 'JayPokale/Chisle'] },
+      { cmd: '/fake/claude', args: ['plugin', 'install', 'chisle@chisle', '--scope', 'user'] }
+    ])
   })
 })

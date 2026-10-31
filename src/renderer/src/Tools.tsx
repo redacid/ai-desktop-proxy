@@ -98,9 +98,52 @@ export function Tools({ disabled, onBusy, onLogStart }: {
     ? <button className="primary" disabled={locked || !!tool.blocked} onClick={() => void act(tool.id, 'update')}>Update to {tool.latest}</button>
     : null
 
-  const rtk = tools.find((t) => t.id === 'rtk')
-  const ponytail = tools.filter((t) => t.id.startsWith('ponytail'))
   const clientName = (id: string): string => id.endsWith('codex') ? 'Codex' : 'Claude Code'
+  const checked = (tool: ToolInfo): React.JSX.Element =>
+    <p className="detail">Version check: {tool.checkedAt ? new Date(tool.checkedAt).toLocaleString() : 'not checked yet'}</p>
+
+  /** Per-client connection rows: RTK hooks or an MCP server registration. */
+  const connectionRows = (tool: ToolInfo): React.JSX.Element => (
+    <ul className="clients">
+      {(['claude', 'codex'] as const).map((client) => {
+        const connected = tool.connected?.[client] ?? null
+        const foreign = tool.foreign?.[client] ?? false
+        return (
+          <Row key={client} name={clientName(client)} on={connected === true}
+            badge={foreign ? 'set up elsewhere' : connected === null ? 'unknown' : connected ? 'connected' : 'not connected'}
+            warn={foreign}
+            canToggle={!tool.blocked && connected !== null && !foreign}
+            title={connected ? `Remove ${tool.name} from this client` : `Add ${tool.name} to this client`}
+            onToggle={(on) => void act(tool.id, `${on ? 'connect' : 'disconnect'}-${client}`)} />
+        )
+      })}
+    </ul>
+  )
+
+  /** One card per plugin with a row per client, whose switch installs or uninstalls it there. */
+  const pluginCard = (name: string, group: ToolInfo[]): React.JSX.Element | null => group.length ? (
+    <article className="tool" key={name}>
+      <div className="client-main">
+        <strong>{name}</strong>
+        {group[0].latest && <span className="badge">latest v{group[0].latest}</span>}
+      </div>
+      {group.map((t) => t.stats).find(Boolean) && <Stats stats={group.map((t) => t.stats).find(Boolean)!} />}
+      <ul className="clients">
+        {group.map((tool) => (
+          <Row key={tool.id} name={clientName(tool.id)} on={tool.installed === true}
+            badge={version(tool)} warn={tool.updateAvailable}
+            canToggle={!tool.blocked && tool.installed !== null}
+            title={tool.installed ? `Uninstall ${name} from this client` : `Install ${name} for this client`}
+            onToggle={(on) => void act(tool.id, on ? 'install' : 'remove')}>
+            <p className="detail">{tool.detail}</p>
+            {notes(tool)}
+            {tool.updateAvailable && <div className="actions">{updateButton(tool)}</div>}
+          </Row>
+        ))}
+      </ul>
+      {checked(group[0])}
+    </article>
+  ) : null
 
   return (
     <section className="card tools">
@@ -114,7 +157,7 @@ export function Tools({ disabled, onBusy, onLogStart }: {
       {error && <p className="error-inline" role="alert">{error}</p>}
       {!tools.length && <p className="detail">Checking tools…</p>}
       <div className="tool-grid">
-        {tools.filter((t) => t.id === 'headroom' || t.id === 'rtk').map((tool) => (
+        {tools.filter((t) => ['headroom', 'rtk', 'serena', 'markitdown'].includes(t.id)).map((tool) => (
           <article className="tool" key={tool.id}>
             <div className="client-main">
               <strong>{tool.name}</strong>
@@ -125,49 +168,15 @@ export function Tools({ disabled, onBusy, onLogStart }: {
             {tool.latest && <p className="detail">Latest: {tool.latest}{tool.updateAvailable ? ' · update available' : ''}</p>}
             {notes(tool)}
             <div className="actions">
-              {tool.installed === false && <button className="primary" disabled={locked || !!tool.blocked} onClick={() => void act(tool.id, 'install')}>Install</button>}
+              {tool.installed === false && ['headroom', 'rtk'].includes(tool.id) && <button className="primary" disabled={locked || !!tool.blocked} onClick={() => void act(tool.id, 'install')}>Install</button>}
               {updateButton(tool)}
             </div>
-            {tool === rtk && tool.installed === true && (
-              <ul className="clients">
-                {(['claude', 'codex'] as const).map((client) => {
-                  const connected = tool.connected?.[client] ?? null
-                  return (
-                    <Row key={client} name={clientName(client)} on={connected === true}
-                      badge={connected === null ? 'unknown' : connected ? 'connected' : 'not connected'}
-                      canToggle={!tool.blocked && connected !== null}
-                      title={connected ? 'Remove RTK hooks from this client' : 'Add RTK hooks to this client'}
-                      onToggle={(on) => void act('rtk', `${on ? 'connect' : 'disconnect'}-${client}`)} />
-                  )
-                })}
-              </ul>
-            )}
-            <p className="detail">Version check: {tool.checkedAt ? new Date(tool.checkedAt).toLocaleString() : 'not checked yet'}</p>
+            {tool.installed === true && tool.connected && connectionRows(tool)}
+            {checked(tool)}
           </article>
         ))}
-        {ponytail.length > 0 && (
-          <article className="tool">
-            <div className="client-main">
-              <strong>Ponytail</strong>
-              {ponytail[0].latest && <span className="badge">latest v{ponytail[0].latest}</span>}
-            </div>
-            {ponytail.map((t) => t.stats).find(Boolean) && <Stats stats={ponytail.map((t) => t.stats).find(Boolean)!} />}
-            <ul className="clients">
-              {ponytail.map((tool) => (
-                <Row key={tool.id} name={clientName(tool.id)} on={tool.installed === true}
-                  badge={version(tool)} warn={tool.updateAvailable}
-                  canToggle={!tool.blocked && tool.installed !== null}
-                  title={tool.installed ? 'Uninstall Ponytail from this client' : 'Install Ponytail for this client'}
-                  onToggle={(on) => void act(tool.id, on ? 'install' : 'remove')}>
-                  <p className="detail">{tool.detail}</p>
-                  {notes(tool)}
-                  {tool.updateAvailable && <div className="actions">{updateButton(tool)}</div>}
-                </Row>
-              ))}
-            </ul>
-            <p className="detail">Version check: {ponytail[0].checkedAt ? new Date(ponytail[0].checkedAt).toLocaleString() : 'not checked yet'}</p>
-          </article>
-        )}
+        {pluginCard('Ponytail', tools.filter((t) => t.id.startsWith('ponytail-')))}
+        {pluginCard('Chisle', tools.filter((t) => t.id.startsWith('chisle-')))}
       </div>
     </section>
   )

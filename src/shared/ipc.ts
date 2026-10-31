@@ -107,7 +107,7 @@ export interface CompressorInfo {
 
 export type CompressorAction = 'install' | 'setup' | 'start' | 'stop' | 'restart' | 'remove'
 
-export type ToolId = 'headroom' | 'rtk' | 'ponytail-claude' | 'ponytail-codex'
+export type ToolId = 'headroom' | 'rtk' | 'ponytail-claude' | 'ponytail-codex' | 'chisle-claude' | 'serena' | 'markitdown'
 export type ToolAction = 'install' | 'update' | 'connect-claude' | 'connect-codex' | 'disconnect-claude' | 'disconnect-codex' | 'remove'
 
 export interface ToolInfo {
@@ -121,8 +121,10 @@ export interface ToolInfo {
   error: string | null
   blocked: string | null
   detail: string
-  /** RTK only: whether `rtk init --show` reports its global hooks in place per client (null = unknown). */
+  /** RTK and MCP servers: per-client connection. RTK: whether `rtk init --show` reports its global hooks in place per client (null = unknown). */
   connected?: { claude: boolean | null; codex: boolean | null }
+  /** MCP servers: a client has a server of that name the app did not add (shown, never changed). */
+  foreign?: { claude: boolean; codex: boolean }
   /** What the tool reports it achieved; null when it reports nothing readable. */
   stats: ToolStats | null
 }

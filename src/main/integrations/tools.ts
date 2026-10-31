@@ -6,17 +6,42 @@ import { gunzipSync } from 'node:zlib'
 import type { CompressorInfo, ToolAction, ToolId, ToolInfo, ToolStats } from '@shared/ipc'
 import { run, runStreaming, type Runner } from '../proxy/exec'
 import { which } from '../proxy/tools'
+import { parse as parseToml } from 'smol-toml'
 import { writeJsonAtomic } from '../fsutil'
 import { HEADROOM_PACKAGE, HEADROOM_PYTHON } from '../compressors/headroom-service'
 
-const IDS: ToolId[] = ['headroom', 'rtk', 'ponytail-claude', 'ponytail-codex']
+const IDS: ToolId[] = ['headroom', 'rtk', 'ponytail-claude', 'ponytail-codex', 'chisle-claude', 'serena', 'markitdown']
 const NAMES: Record<ToolId, string> = {
-  headroom: 'headroom', rtk: 'RTK', 'ponytail-claude': 'Ponytail · Claude Code', 'ponytail-codex': 'Ponytail · Codex'
+  headroom: 'headroom', rtk: 'RTK', 'ponytail-claude': 'Ponytail · Claude Code', 'ponytail-codex': 'Ponytail · Codex',
+  'chisle-claude': 'Chisle · Claude Code', serena: 'Serena', markitdown: 'MarkItDown'
 }
 export const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000
 const PRESENCE_INTERVAL_MS = 60_000
-const PONYTAIL = 'ponytail@ponytail'
-const PONYTAIL_SOURCE = 'DietrichGebert/ponytail'
+
+/** Client plugins installed from their official marketplace (one ToolId per client). */
+export const PLUGINS = {
+  ponytail: { name: 'Ponytail', plugin: 'ponytail@ponytail', marketplace: 'ponytail', repo: 'DietrichGebert/ponytail' },
+  chisle: { name: 'Chisle', plugin: 'chisle@chisle', marketplace: 'chisle', repo: 'JayPokale/Chisle' }
+} as const
+type PluginKey = keyof typeof PLUGINS
+export const pluginKey = (id: ToolId): PluginKey | null => id.startsWith('ponytail-') ? 'ponytail' : id.startsWith('chisle-') ? 'chisle' : null
+
+/**
+ * MCP servers run by uvx from a pinned PyPI release, registered per client at user scope.
+ * The pin in the registration is the installed version; nothing else is installed.
+ */
+export const MCP_SERVERS = {
+  serena: { pkg: 'serena-agent', args: (codex: boolean) => ['serena', 'start-mcp-server', '--context', codex ? 'codex' : 'claude-code', '--project-from-cwd'] },
+  markitdown: { pkg: 'markitdown-mcp', args: () => ['markitdown-mcp'] }
+} as const
+type McpKey = keyof typeof MCP_SERVERS
+const mcpKey = (id: ToolId): McpKey | null => id === 'serena' || id === 'markitdown' ? id : null
+const MCP_PYTHON = '3.13'
+// PyPI versions incl. pre-releases (markitdown-mcp has only alphas); never anything an argument could abuse.
+const pypiVersion = (v: unknown): string | null => typeof v === 'string' && /^\d+(\.\d+)*([a-z]+\d+)?$/.test(v) ? v : null
+type UpdateKey = 'headroom' | 'rtk' | PluginKey | McpKey
+const UPDATE_KEYS: UpdateKey[] = ['headroom', 'rtk', 'ponytail', 'chisle', 'serena', 'markitdown']
+const updateKey = (id: ToolId): UpdateKey => pluginKey(id) ?? id as UpdateKey
 
 type Json = Record<string, unknown>
 const object = (v: unknown): Json => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Json : {}
@@ -34,24 +59,53 @@ export function binaryVersion(output: string): string | null {
   return releaseVersion(/(?:^|\s)v?(\d+\.\d+\.\d+)(?=\s|$)/.exec(output)?.[1])
 }
 
+const int = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+
 /** Parse only native installed-plugin lists; an unknown schema is never "missing". */
-export function ponytailInfo(raw: unknown, codex: boolean): { installed: boolean; version: string | null; enabled: boolean } {
+export function pluginInfo(raw: unknown, codex: boolean, plugin: string): { installed: boolean; version: string | null; enabled: boolean } {
   const entries = codex ? object(raw).installed : raw
   if (!Array.isArray(entries)) throw new Error('Unrecognized installed-plugin list')
-  const candidates = entries.map(object).filter((e) => (codex ? e.pluginId : e.id) === PONYTAIL && (!e.scope || e.scope === 'user'))
+  const candidates = entries.map(object).filter((e) => (codex ? e.pluginId : e.id) === plugin && (!e.scope || e.scope === 'user'))
   const entry = candidates[0]
   return { installed: !!entry, version: releaseVersion(entry?.version), enabled: entry?.enabled === true }
 }
 
-export function officialPonytailSource(entry: unknown): boolean {
+/** Whether a marketplace entry points at `repo` (owner/name) on GitHub and nowhere else. */
+export function officialSource(entry: unknown, repo: string): boolean {
   const e = object(entry)
   const source = object(e.marketplaceSource)
   const nested = object(e.source)
+  const r = repo.replace('/', '\\/')
+  const official = new RegExp(`^(?:${r}|https:\\/\\/github\\.com\\/${r}(?:\\.git)?\\/?|git@github\\.com:${r}(?:\\.git)?)$`, 'i')
   return [e.repo, e.url, e.source, source.source, source.url, source.repoUrl, nested.repo, nested.url].some((v) =>
-    typeof v === 'string' && /^(?:DietrichGebert\/ponytail|https:\/\/github\.com\/DietrichGebert\/ponytail(?:\.git)?\/?|git@github\.com:DietrichGebert\/ponytail(?:\.git)?)$/i.test(v))
+    typeof v === 'string' && official.test(v))
 }
 
-const int = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+/** An MCP server entry ({command, args}) registered by this app: uvx with `--from <pkg>==<version>`. */
+export function mcpPin(entry: unknown, pkg: string): string | null {
+  const e = object(entry)
+  const args = Array.isArray(e.args) ? e.args : []
+  const from = args.indexOf('--from')
+  const spec = from >= 0 ? args[from + 1] : null
+  if (typeof e.command !== 'string' || !/(^|\/)uvx$/.test(e.command) || typeof spec !== 'string' || !spec.startsWith(`${pkg}==`)) return null
+  return pypiVersion(spec.slice(pkg.length + 2))
+}
+
+/** chisle's compress-output hook ledger: characters it elided from tool output. */
+export function parseChisleStats(raw: unknown): ToolStats | null {
+  const s = object(raw)
+  if (typeof s.savedChars !== 'number' || typeof s.events !== 'number') return null
+  return {
+    source: 'chisle compress-output hook, this machine',
+    facts: [
+      { label: 'characters elided', value: int.format(s.savedChars) },
+      { label: '≈ tokens saved', value: int.format(s.savedChars / 4) },
+      { label: 'outputs compressed', value: int.format(s.events) }
+    ],
+    daily: []
+  }
+}
+
 const num = (v: unknown): number => typeof v === 'number' && Number.isFinite(v) ? v : 0
 
 /** `rtk gain --daily --format json`: local savings recorded by RTK's hooks. */
@@ -130,7 +184,7 @@ export interface ToolPlan {
 }
 
 interface UpdateEntry { latest: string | null; checkedAt: string | null; error: string | null }
-type UpdateCache = Record<'headroom' | 'rtk' | 'ponytail', UpdateEntry>
+type UpdateCache = Record<UpdateKey, UpdateEntry>
 const emptyUpdate = (): UpdateEntry => ({ latest: null, checkedAt: null, error: null })
 
 export interface ToolDependencies {
@@ -138,6 +192,8 @@ export interface ToolDependencies {
   home: string
   /** XDG config dir, where Ponytail band keeps its ledger; defaults to ~/.config. */
   configHome?: string
+  /** CODEX_HOME; defaults to ~/.codex. */
+  codexHome?: string
   arch?: string
   runner?: Runner
   stream?: typeof runStreaming
@@ -158,7 +214,7 @@ export class ToolManager extends EventEmitter {
   private readonly binary: string
   private readonly rtkLink: string
   private readonly cacheFile: string
-  private updates: UpdateCache = { headroom: emptyUpdate(), rtk: emptyUpdate(), ponytail: emptyUpdate() }
+  private updates = Object.fromEntries(UPDATE_KEYS.map((k) => [k, emptyUpdate()])) as UpdateCache
   private tools: ToolInfo[] = IDS.map((id) => ({ id, name: NAMES[id], installed: null, version: null, latest: null,
     updateAvailable: false, checkedAt: null, error: null, blocked: 'Checking installation…', detail: 'Not checked yet.', stats: null }))
   private timer: NodeJS.Timeout | null = null
@@ -182,9 +238,9 @@ export class ToolManager extends EventEmitter {
   async start(): Promise<void> {
     try {
       const raw = object(JSON.parse(await fs.readFile(this.cacheFile, 'utf8')))
-      for (const key of ['headroom', 'rtk', 'ponytail'] as const) {
+      for (const key of UPDATE_KEYS) {
         const e = object(raw[key])
-        this.updates[key] = { latest: releaseVersion(e.latest), checkedAt: typeof e.checkedAt === 'string' ? e.checkedAt : null, error: null }
+        this.updates[key] = { latest: mcpKey(key as ToolId) ? pypiVersion(e.latest) : releaseVersion(e.latest), checkedAt: typeof e.checkedAt === 'string' ? e.checkedAt : null, error: null }
       }
     } catch { /* No cache yet or invalid cache: check registries again. */ }
     this.stop()
@@ -221,18 +277,21 @@ export class ToolManager extends EventEmitter {
     return Buffer.concat(chunks)
   }
 
-  private async latest(key: keyof UpdateCache): Promise<string> {
+  private async latest(key: UpdateKey): Promise<string> {
+    const mcp = key === 'serena' || key === 'markitdown' ? MCP_SERVERS[key] : null
     const url = key === 'headroom' ? 'https://pypi.org/pypi/headroom-ai/json'
       : key === 'rtk' ? 'https://api.github.com/repos/rtk-ai/rtk/releases/latest'
-      : 'https://raw.githubusercontent.com/DietrichGebert/ponytail/main/.claude-plugin/plugin.json'
+      : mcp ? `https://pypi.org/pypi/${mcp.pkg}/json`
+      : `https://raw.githubusercontent.com/${PLUGINS[key as PluginKey].repo}/main/.claude-plugin/plugin.json`
     const raw = object(JSON.parse((await this.response(url, 8 * 1024 * 1024)).toString('utf8')))
-    const version = releaseVersion(key === 'headroom' ? object(raw.info).version : key === 'rtk' ? raw.tag_name : raw.version)
+    const version = mcp ? pypiVersion(object(raw.info).version)
+      : releaseVersion(key === 'headroom' ? object(raw.info).version : key === 'rtk' ? raw.tag_name : raw.version)
     if (!version || (key === 'rtk' && (raw.draft === true || raw.prerelease === true))) throw new Error('No stable version in update source')
     return version
   }
 
   private async check(force: boolean): Promise<ToolInfo[]> {
-    await Promise.all((['headroom', 'rtk', 'ponytail'] as const).map(async (key) => {
+    await Promise.all(UPDATE_KEYS.map(async (key) => {
       const previous = this.updates[key]
       const elapsed = this.now() - Date.parse(previous.checkedAt ?? '')
       if (!force && Number.isFinite(elapsed) && elapsed >= 0 && elapsed < UPDATE_INTERVAL_MS) return
@@ -243,8 +302,7 @@ export class ToolManager extends EventEmitter {
     try { await writeJsonAtomic(this.cacheFile, this.updates) }
     catch (err) { for (const e of Object.values(this.updates)) e.error ??= `Cannot save update cache: ${(err as Error).message}` }
     this.tools = await Promise.all(IDS.map(async (id): Promise<ToolInfo> => {
-      const key = id.startsWith('ponytail') ? 'ponytail' : id as 'rtk' | 'headroom'
-      const update = this.updates[key]
+      const update = this.updates[updateKey(id)]
       const info: ToolInfo = { id, name: NAMES[id], installed: null, version: null, latest: update.latest,
         updateAvailable: false, checkedAt: update.checkedAt, error: update.error, blocked: null, detail: '', stats: null }
       try {
@@ -264,22 +322,27 @@ export class ToolManager extends EventEmitter {
           if (!['x64', 'arm64'].includes(this.deps.arch ?? process.arch)) info.blocked = 'RTK binary installation supports Linux x64 and arm64.'
           info.detail = binary === this.binary ? 'App-managed binary. Connect it to each client below.'
             : binary ? `Found at ${binary}. Updates install a separate app-managed copy.` : 'Reduces command output before the agent reads it.'
+        } else if (mcpKey(id)) {
+          await this.detectMcp(info, MCP_SERVERS[mcpKey(id)!].pkg)
         } else {
-          const codex = id === 'ponytail-codex'
+          const key = pluginKey(id)!
+          const codex = id.endsWith('-codex')
           const cli = await this.find(codex ? 'codex' : 'claude')
           if (!cli) { info.installed = false; info.blocked = `Install ${codex ? 'Codex' : 'Claude Code'} first.` }
           else {
             const r = await this.runner(cli, ['plugin', 'list', '--json'])
             if (r.code !== 0) throw new Error(r.stderr || 'Cannot list installed plugins')
-            const plugin = ponytailInfo(JSON.parse(r.stdout), codex)
+            const plugin = pluginInfo(JSON.parse(r.stdout), codex, PLUGINS[key].plugin)
             info.installed = plugin.installed
             info.version = plugin.version
-            if (plugin.installed && !codex) info.stats = await this.ponytailStats(plugin.version)
+            if (plugin.installed && !codex) info.stats = key === 'ponytail' ? await this.ponytailStats(plugin.version) : await this.chisleStats()
             info.detail = plugin.installed ? `${plugin.enabled ? 'Enabled' : 'Installed but disabled'}. Restart the client after changes.`
-              : 'Install the official Ponytail plugin for this client.'
+              : `Install the official ${PLUGINS[key].name} plugin for this client.`
           }
         }
-        info.updateAvailable = info.installed === true && newerVersion(info.latest, info.version)
+        info.updateAvailable = info.installed === true && (mcpKey(id)
+          ? !!info.version && !!info.latest && info.version !== info.latest
+          : newerVersion(info.latest, info.version))
       } catch (err) { info.error = [info.error, `Detection failed: ${(err as Error).message}`].filter(Boolean).join('\n'); info.blocked = 'Resolve the detection error before changing this tool.' }
       return info
     }))
@@ -303,6 +366,31 @@ export class ToolManager extends EventEmitter {
   private async rtkShow(binary: string, codex: boolean): Promise<boolean | null> {
     const r = await this.runner(binary, ['init', '-g', ...(codex ? ['--codex'] : []), '--show'])
     return r.code === 0 ? rtkConnected(r.stdout, codex) : null
+  }
+
+  /** Our registrations in Claude Code's user config and Codex's config.toml; a foreign entry of that name is reported, never changed. */
+  private async detectMcp(info: ToolInfo, pkg: string): Promise<void> {
+    const uvx = await this.find('uvx')
+    info.installed = !!uvx
+    if (!uvx) { info.blocked = 'Install uv first: https://docs.astral.sh/uv/'; info.detail = 'Runs with uvx from PyPI.'; return }
+    const claudeJson = join(this.deps.home, '.claude.json')
+    const codexToml = join(this.deps.codexHome ?? join(this.deps.home, '.codex'), 'config.toml')
+    const read = async (file: string, parse: (text: string) => unknown, key: string): Promise<unknown> => {
+      const text = await fs.readFile(file, 'utf8').catch((err) => { if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null; throw err })
+      return text === null ? undefined : object(object(parse(text))[key])[info.id]
+    }
+    const entries = { claude: await read(claudeJson, JSON.parse, 'mcpServers'), codex: await read(codexToml, parseToml, 'mcp_servers') }
+    const pins = { claude: mcpPin(entries.claude, pkg), codex: mcpPin(entries.codex, pkg) }
+    info.connected = { claude: entries.claude !== undefined, codex: entries.codex !== undefined }
+    info.foreign = { claude: entries.claude !== undefined && !pins.claude, codex: entries.codex !== undefined && !pins.codex }
+    info.version = pins.claude ?? pins.codex
+    info.detail = `MCP server, run with uvx from PyPI ${pkg}${info.version ? `==${info.version}` : ''} at user scope. Restart the client after changes.`
+    if (info.foreign.claude || info.foreign.codex) info.detail += ' A server with this name set up outside the app is left as it is.'
+  }
+
+  private async chisleStats(): Promise<ToolStats | null> {
+    const file = join(this.deps.home, '.claude', '.chisle-compress-stats.json')
+    try { return parseChisleStats(JSON.parse(await fs.readFile(file, 'utf8'))) } catch { return null }
   }
 
   /** The band ledger when Ponytail has recorded sessions, otherwise its published benchmark. */
@@ -330,6 +418,8 @@ export class ToolManager extends EventEmitter {
     if (action === 'update' && !info.updateAvailable) throw new Error('No newer stable version is available')
     const commands: Command[] = []
     const plan: ToolPlan = { id, action, commands, version: info.latest, detail: '' }
+    const mcp = mcpKey(id)
+    if (mcp) return this.mcpPlan(info, mcp, action, plan)
     if (action.startsWith('disconnect-')) {
       if (id !== 'rtk') throw new Error('Only RTK supports this connection action')
       const binary = await this.rtkBinary()
@@ -341,13 +431,15 @@ export class ToolManager extends EventEmitter {
       commands.push({ cmd: binary, args })
       plan.detail = `Removes RTK's global hooks and instructions from ${codex ? 'Codex' : 'Claude Code'}. RTK stays installed and can be connected again. Restart the client afterward.\n\n${preview.stdout}\n${preview.stderr}`
     } else if (action === 'remove') {
-      if (!id.startsWith('ponytail')) throw new Error('Only Ponytail can be removed here')
-      if (info.installed !== true) throw new Error('Ponytail is not installed for this client')
-      const codex = id === 'ponytail-codex'
+      const key = pluginKey(id)
+      if (!key) throw new Error('Only client plugins can be removed here')
+      const { name, plugin } = PLUGINS[key]
+      if (info.installed !== true) throw new Error(`${name} is not installed for this client`)
+      const codex = id.endsWith('-codex')
       const cli = await this.find(codex ? 'codex' : 'claude')
       if (!cli) throw new Error('Client CLI not found')
-      commands.push({ cmd: cli, args: codex ? ['plugin', 'remove', PONYTAIL] : ['plugin', 'uninstall', PONYTAIL, '--scope', 'user'] })
-      plan.detail = `Uninstalls the Ponytail plugin from ${codex ? 'Codex' : 'Claude Code'} with the client's own command. Install brings it back. Restart the client afterward.`
+      commands.push({ cmd: cli, args: codex ? ['plugin', 'remove', plugin] : ['plugin', 'uninstall', plugin, '--scope', 'user'] })
+      plan.detail = `Uninstalls the ${name} plugin from ${codex ? 'Codex' : 'Claude Code'} with the client's own command. Install brings it back. Restart the client afterward.`
     } else if (action.startsWith('connect-')) {
       if (id !== 'rtk') throw new Error('Only RTK supports this connection action')
       const binary = await this.rtkBinary()
@@ -382,24 +474,64 @@ export class ToolManager extends EventEmitter {
       plan.restartHeadroom = service.active
       plan.detail = `Install headroom ${plan.version} with uv (a few hundred MB). ${service.active ? 'The app-managed service will be restarted; requests use the direct API fallback while it restarts.' : 'The service stays stopped; use Set up & start on its card when ready.'}`
     } else {
-      const codex = id === 'ponytail-codex'
+      const { name, plugin, marketplace, repo } = PLUGINS[pluginKey(id)!]
+      const codex = id.endsWith('-codex')
       const cli = await this.find(codex ? 'codex' : 'claude')
       if (!cli) throw new Error('Client CLI not found')
-      // Refresh only Ponytail's marketplace, never all of the user's plugins.
+      // Refresh only this plugin's marketplace, never all of the user's plugins.
       const list = await this.runner(cli, ['plugin', 'marketplace', 'list', '--json'])
       if (list.code !== 0) throw new Error(list.stderr || list.stdout)
       const marketplaces: unknown = JSON.parse(list.stdout)
       const entries = Array.isArray(marketplaces) ? marketplaces : object(marketplaces).marketplaces
       if (!Array.isArray(entries)) throw new Error('Unrecognized marketplace list')
-      const existing = entries.map(object).find((e) => e.name === 'ponytail')
+      const existing = entries.map(object).find((e) => e.name === marketplace)
       if (existing) {
-        if (!officialPonytailSource(existing)) throw new Error('A different marketplace named ponytail already exists; resolve it in the client first')
-        commands.push({ cmd: cli, args: ['plugin', 'marketplace', codex ? 'upgrade' : 'update', 'ponytail'] })
-      } else commands.push({ cmd: cli, args: ['plugin', 'marketplace', 'add', PONYTAIL_SOURCE] })
-      commands.push({ cmd: cli, args: ['plugin', codex ? 'add' : info.installed ? 'update' : 'install', PONYTAIL, ...(!codex ? ['--scope', 'user'] : [])] })
-      plan.detail = `Use the official ${PONYTAIL_SOURCE} marketplace and install the latest Ponytail plugin${info.latest ? ` (currently ${info.latest})` : ''} for this client. Restart the client afterward.${codex ? ' Review and trust Ponytail lifecycle hooks in the client’s /hooks screen; the app does not approve them for you.' : ''}`
+        if (!officialSource(existing, repo)) throw new Error(`A different marketplace named ${marketplace} already exists; resolve it in the client first`)
+        commands.push({ cmd: cli, args: ['plugin', 'marketplace', codex ? 'upgrade' : 'update', marketplace] })
+      } else commands.push({ cmd: cli, args: ['plugin', 'marketplace', 'add', repo] })
+      commands.push({ cmd: cli, args: ['plugin', codex ? 'add' : info.installed ? 'update' : 'install', plugin, ...(!codex ? ['--scope', 'user'] : [])] })
+      plan.detail = `Use the official ${repo} marketplace and install the latest ${name} plugin${info.latest ? ` (currently ${info.latest})` : ''} for this client. Restart the client afterward.${codex ? ` Review and trust ${name} lifecycle hooks in the client’s /hooks screen; the app does not approve them for you.` : ''}`
     }
     if (commands.length) plan.detail += `\n\nCommands (executed without a shell):\n${commands.map(formatCommand).join('\n')}`
+    return plan
+  }
+
+  /** Connect, disconnect or re-pin an MCP server with the clients' own `mcp add/remove` commands. */
+  private async mcpPlan(info: ToolInfo, key: McpKey, action: ToolAction, plan: ToolPlan): Promise<ToolPlan> {
+    const { pkg, args } = MCP_SERVERS[key]
+    const name = info.id
+    const uvx = (await this.find('uvx'))!
+    const cli = async (codex: boolean): Promise<string> => {
+      const found = await this.find(codex ? 'codex' : 'claude')
+      if (!found) throw new Error(`Install ${codex ? 'Codex' : 'Claude Code'} first`)
+      return found
+    }
+    const add = async (codex: boolean, version: string): Promise<Command> => {
+      const server = [uvx, '--python', MCP_PYTHON, '--from', `${pkg}==${version}`, ...args(codex)]
+      return { cmd: await cli(codex), args: codex ? ['mcp', 'add', name, '--', ...server] : ['mcp', 'add', '--scope', 'user', name, '--', ...server] }
+    }
+    const remove = async (codex: boolean): Promise<Command> =>
+      ({ cmd: await cli(codex), args: codex ? ['mcp', 'remove', name] : ['mcp', 'remove', '--scope', 'user', name] })
+    const clients = (['claude', 'codex'] as const)
+    if (action === 'update') {
+      const ours = clients.filter((c) => info.connected?.[c] && !info.foreign?.[c])
+      for (const c of ours) plan.commands.push(await remove(c === 'codex'), await add(c === 'codex', plan.version!))
+      plan.detail = `Re-registers ${info.name} with ${pkg}==${plan.version} in ${ours.join(' and ')}; uvx downloads it on the next client start.`
+    } else if (action.startsWith('connect-') || action.startsWith('disconnect-')) {
+      const client = action.endsWith('-codex') ? 'codex' : 'claude'
+      if (info.foreign?.[client]) throw new Error(`${client === 'codex' ? 'Codex' : 'Claude Code'} already has an MCP server named ${name} that this app did not add; change it there`)
+      const version = info.version ?? plan.version
+      if (action.startsWith('connect-')) {
+        if (!version) throw new Error(`Check for updates successfully before adding ${info.name}`)
+        plan.version = version
+        plan.commands.push(await add(client === 'codex', version))
+        plan.detail = `Registers the ${info.name} MCP server (${pkg}==${version}, run by uvx) at user scope. uvx downloads it on the client's next start.`
+      } else {
+        plan.commands.push(await remove(client === 'codex'))
+        plan.detail = `Removes the ${info.name} MCP server registration. Packages cached by uvx stay until \`uv cache clean\`.`
+      }
+    } else throw new Error(`${info.name} is switched per client; it has nothing to install or remove`)
+    plan.detail += ` Restart the client afterward.\n\nCommands (executed without a shell):\n${plan.commands.map(formatCommand).join('\n')}`
     return plan
   }
 
@@ -428,8 +560,9 @@ export class ToolManager extends EventEmitter {
     const info = this.tools.find((e) => e.id === plan.id)!
     const client = plan.action.endsWith('-codex') ? 'codex' : 'claude'
     if (plan.action === 'remove' && info.installed !== false) throw new Error(`Command completed, but ${info.name} is still listed as installed. ${info.error ?? 'Check the client plugin manager.'}`)
-    if (plan.action.startsWith('disconnect-') && info.connected?.[client] !== false) throw new Error(`Command completed, but rtk init --show does not confirm RTK was removed from ${client === 'codex' ? 'Codex' : 'Claude Code'}.`)
-    if ((plan.action === 'install' || plan.action === 'update') && (info.installed !== true || !info.version || (plan.version && newerVersion(plan.version, info.version)))) {
+    if (plan.action.startsWith('disconnect-') && info.connected?.[client] !== false) throw new Error(`Command completed, but ${info.name} still shows as connected to ${client === 'codex' ? 'Codex' : 'Claude Code'}.`)
+    if (mcpKey(plan.id) && plan.action.startsWith('connect-') && info.version !== plan.version) throw new Error(`Command completed, but ${info.name} ${plan.version} is not registered in ${client === 'codex' ? 'Codex' : 'Claude Code'}.`)
+    if ((plan.action === 'install' || plan.action === 'update') && (info.installed !== true || !info.version || (plan.version && (mcpKey(plan.id) ? info.version !== plan.version : newerVersion(plan.version, info.version))))) {
       throw new Error(`Command completed, but ${info.name} ${plan.version ?? ''} could not be verified. ${info.error ?? 'Check the client plugin manager.'}`)
     }
     log('Done. Restart client sessions to apply hook or plugin changes.')
