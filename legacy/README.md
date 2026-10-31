@@ -1,3 +1,6 @@
+> **Legacy.** This is the original shell version. The Electron app in the repository root replaces it; its
+> **Apply** button migrates the `claude-desktop-proxy.service` unit written by `cdp.sh`. Kept for reference only.
+
 # claude-desktop-proxy
 
 Claude Code Desktop forces `ANTHROPIC_BASE_URL=https://api.anthropic.com` for the CLI it starts, so a

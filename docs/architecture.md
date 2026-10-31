@@ -1,0 +1,125 @@
+# Architecture
+
+## Processes
+
+```
+┌────────────── Electron app ─────────────────────────────┐
+│ Renderer (React, src/renderer)                          │
+│   └─ window.api ── preload (contextBridge) ── IPC ──┐   │
+│ Main process (src/main)                             ▼   │
+│   ClientManager ── ClaudeCodeAdapter ── ~/.claude/settings.json
+│   ProxyManager ─── systemctl --user ── claude-desktop-proxy.service ── mitmdump + cdp_addon.py
+│   HeadroomService ─ systemctl --user ── claude-desktop-proxy-headroom.service ── headroom proxy
+│   HeadroomBackend ─ HTTP /health, /stats-history
+│   StatusMonitor, AppTray, AppStore, Autostart           │
+└─────────────────────────────────────────────────────────┘
+```
+
+All file, process and network work happens in the main process. The renderer only shows state and sends
+commands over typed IPC; it has no Node access (`contextIsolation`).
+
+The proxy and headroom run as **systemd user services**, not as children of the app. Quitting or crashing the app
+must never leave clients pointing at a dead proxy port, so the services outlive it.
+
+## Request path
+
+1. A client started with `HTTPS_PROXY=http://127.0.0.1:<port>` opens a `CONNECT` to mitmdump.
+2. mitmdump decrypts only `api.anthropic.com:443` (`--allow-hosts`); everything else is tunnelled untouched.
+   The client trusts mitmproxy's CA through `NODE_EXTRA_CA_CERTS`; the system trust store is never changed.
+3. The addon (`resources/mitmproxy/cdp_addon.py`) rewrites the request target to headroom while headroom's
+   `/health` answers (checked every 5 s in a background thread, ignoring proxy variables). Otherwise the request
+   goes to the API directly. The `Host` header stays `api.anthropic.com`.
+4. Routing happens in the `requestheaders` hook: with `stream_large_bodies=1` the body is streamed to whatever
+   server is chosen there. `connection_strategy=lazy` avoids opening an API connection a routed request never
+   uses.
+5. headroom runs with proxy variables unset (`UnsetEnvironment=` in its unit), so it reaches the API directly and
+   cannot loop back through mitmdump.
+
+## Main-process modules
+
+| Module | Responsibility |
+|---|---|
+| `index.ts` | Wiring, IPC handlers, user actions (`runProxyAction`, `runCompressorAction`, `saveSettings`), dialogs. One service action at a time (`exclusive`) |
+| `clients/types.ts` | `ClientAdapter` interface, `AppliedRecord` (what we wrote into a config) |
+| `clients/claude-code.ts` | Claude Code adapter: `env` block of `~/.claude/settings.json` |
+| `clients/manager.ts` | `ClientManager`: watches config dirs, periodic checks, auto-restore, failsafe, enable/disable, suspend/resume |
+| `proxy/manager.ts` | `ProxyManager`: find/install mitmdump, render the unit, set up/start/stop/remove, wait until serving |
+| `proxy/systemd.ts` | Unit rendering with systemd-safe quoting; `systemctl --user` / `journalctl --user` wrapper |
+| `proxy/tools.ts` | Finding `uv` and uv-installed tools, port owner via `ss`, `PortTakenError` |
+| `proxy/exec.ts` | Shell-free command runner; streaming runner for installs (whole lines) |
+| `compressors/headroom.ts` | `HeadroomBackend`: `/health`, `/stats-history` parsing |
+| `compressors/headroom-service.ts` | `HeadroomService`: install/run headroom as a user service, external detection |
+| `status.ts` | `StatusMonitor` (polling, combined health) and the status-line functions for each card |
+| `store.ts` | `AppStore`: `state.json` with settings and per-client `{ enabled, applied }` |
+| `settings.ts` | Validation of user settings |
+| `autostart.ts` | XDG autostart entry |
+| `fsutil.ts` | Atomic JSON writes that keep symlinks, permissions and Unicode; one-time backups |
+| `proxy-env.ts` | The proxy environment for clients; TCP port probe |
+| `tray.ts`, `window.ts`, `paths.ts` | Tray menu, window (close hides), resource paths in dev and packaged builds |
+
+`src/shared/ipc.ts` is the single contract between main and renderer: every channel and every type that crosses
+it is defined there.
+
+## IPC
+
+| Channel | Direction | Payload |
+|---|---|---|
+| `status:get`, `status:refresh` | invoke | → `AppStatus` |
+| `status:changed` | main → renderer | `AppStatus` after every check |
+| `client:set-enabled` | invoke | `(id, enabled)` → `ActionResult` |
+| `proxy:action`, `compressor:action` | invoke | `install \| setup \| start \| stop \| restart \| remove` → `ActionResult` |
+| `proxy:logs`, `compressor:logs` | invoke | → last 80 journal lines |
+| `proxy:install-log` | main → renderer | one line of install output (both services) |
+| `settings:get`, `settings:save` | invoke | `UserSettings` → `ActionResult` |
+
+## Client state machine
+
+`ClaudeCodeAdapter.inspect` classifies the config as `applied`, `absent`, `partial`, `conflict`, `missing` or
+`error`. Values equal to the last `AppliedRecord` (for example the previous port) count as ours, so a port change
+reads as `partial` and is repaired, not reported as a conflict.
+
+`ClientManager.check` runs at start, 500 ms after any change in a watched config directory, on the check interval,
+and when the proxy's listening state flips:
+
+1. **Failsafe.** Enabled + `applied`, but the proxy has been down for 5 s → remove our settings, keep the client
+   enabled.
+2. **Auto-restore.** Enabled + `absent`/`partial`, auto-restore on, proxy serving, not held → apply again.
+3. **Hold.** `suspendAll()` (before Stop/Remove) removes settings and holds restores until `resume()`, which runs
+   after Start/Setup or when the proxy starts listening again.
+
+## Invariants
+
+These protect the user's configs and running sessions; keep them when changing code.
+
+- Never overwrite a value we did not write. A foreign `HTTPS_PROXY` or `NODE_EXTRA_CA_CERTS` is a conflict.
+- Remove only what the `AppliedRecord` says we wrote; `NO_PROXY` is merged and un-merged host by host.
+- Never write a config we could not parse; never create a config on remove; never rewrite an unchanged file.
+- Writes are atomic, keep symlinks (dotfiles), file mode and Unicode, and leave no temp files.
+- Clients first on the way down (remove settings, then stop the proxy); proxy first on the way up.
+- Never enable a client while nothing listens on the proxy port.
+- Never start a service on a port another process holds; name the process and ask before stopping it.
+- Never touch a headroom the app did not start.
+- Install anything only after the user confirms a dialog that names the command.
+
+## State
+
+`~/.config/claude-desktop-proxy/state.json` (Electron `userData`):
+
+```json
+{
+  "proxyPort": 8877,
+  "caFile": "/home/me/.mitmproxy/mitmproxy-ca-cert.pem",
+  "headroomUrl": "http://127.0.0.1:6767",
+  "autoRepair": true,
+  "checkIntervalSec": 60,
+  "clients": {
+    "claude-code": {
+      "enabled": true,
+      "applied": { "proxyUrl": "http://127.0.0.1:8877", "caFile": "…", "noProxyAdded": ["127.0.0.1", "localhost"] }
+    }
+  }
+}
+```
+
+The services' unit files are regenerated from these settings; the app compares them with what it would write and
+shows **Apply** when they differ (`unit: outdated`), or when the unit came from `legacy/cdp.sh` (`legacy`).
