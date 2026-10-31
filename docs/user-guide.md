@@ -112,7 +112,9 @@ appear in the Install log. Missing optional tools do not turn the proxy's health
   is needed. Coding clients must have `~/.local/bin` on PATH before other RTK installations; restart clients
   after installation. **Connect to Claude Code / Codex** previews the native `rtk init` changes, then asks
   before registering global hooks and instructions. Custom project filters are not automatically trusted.
-  Reconnection is explicit; stopping the API proxy does not remove RTK hooks.
+  Reconnection is explicit; stopping the API proxy does not remove RTK hooks. The card asks
+  `rtk init -g --show` (and `--codex --show`) whether RTK's global hooks are in place: a connected client shows
+  **connected to …** instead of the button; a partial setup keeps the button so it can be repaired.
 - **Ponytail:** requires the corresponding client CLI with plugin support. Uses the official
   `DietrichGebert/ponytail` marketplace and the client's native install/update commands. Only the Ponytail
   marketplace is refreshed, not every marketplace or plugin. A different marketplace already named

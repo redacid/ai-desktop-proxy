@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CompressorInfo } from '@shared/ipc'
-import { approveToolAction, binaryVersion, extractRtk, newerVersion, officialPonytailSource, parsePonytailGain, parseRtkGain, ponytailInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
+import { approveToolAction, binaryVersion, extractRtk, newerVersion, officialPonytailSource, parsePonytailGain, parseRtkGain, rtkConnected, ponytailInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
 
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))) })
@@ -343,5 +343,34 @@ describe('tool stats', () => {
     expect(stats.facts).toEqual([{ label: 'less lines of code', value: '53%' }, { label: 'less output tokens', value: '45%' }])
     expect(stats.source).toMatch(/benchmark · 39 tasks.*nothing locally/)
     expect(parsePonytailGain('no scoreboard')).toBeNull()
+  })
+})
+
+describe('rtkConnected', () => {
+  const claude = [
+    'rtk Configuration:', '',
+    '[ok] Hook: rtk hook claude (native binary command)',
+    '[ok] RTK.md: /home/u/.claude/RTK.md (slim mode)',
+    '[ok] Global (~/.claude/CLAUDE.md): @RTK.md reference',
+    '[--] Local (./CLAUDE.md): exists but rtk not configured',
+    '[ok] settings.json: RTK hooks configured (PreToolUse)',
+    '[--] OpenCode: plugin not found'
+  ].join('\n')
+  const codex = [
+    'rtk Configuration (Codex CLI):', '',
+    '[--] Global RTK.md: not found',
+    '[--] Global hook: not found',
+    '[--] Global AGENTS.md: exists but rtk not configured',
+    '[--] Local hook: not found'
+  ].join('\n')
+
+  it('ignores project-local and other-client lines', () => {
+    expect(rtkConnected(claude, false)).toBe(true)
+    expect(rtkConnected(codex, true)).toBe(false)
+    expect(rtkConnected(codex.replace(/\[--\] Global/g, '[ok] Global'), true)).toBe(true)
+  })
+  it('treats a partial setup as not connected and unknown output as unknown', () => {
+    expect(rtkConnected(claude.replace('[ok] settings.json', '[--] settings.json'), false)).toBe(false)
+    expect(rtkConnected('something else', false)).toBeNull()
   })
 })

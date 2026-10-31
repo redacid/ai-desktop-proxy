@@ -71,6 +71,16 @@ export function parseRtkGain(raw: unknown): ToolStats | null {
   }
 }
 
+/**
+ * `rtk init -g [--codex] --show`: connected when every global item is [ok]. Project-local
+ * lines depend on the app's cwd and are ignored.
+ */
+export function rtkConnected(output: string, codex: boolean): boolean | null {
+  const lines = output.split('\n').map((l) => /^\[(ok|--|!!|\w+)\]\s+(.+?):/.exec(l.trim())).filter((m) => m !== null)
+  const global = lines.filter(([, , name]) => codex ? name.startsWith('Global ') : ['Hook', 'RTK.md', 'settings.json'].includes(name) || name.startsWith('Global ('))
+  return global.length ? global.every(([, status]) => status === 'ok') : null
+}
+
 /** The scoreboard in Ponytail's own ponytail-gain skill: published benchmark figures, not local ones. */
 export function parsePonytailGain(markdown: string): ToolStats | null {
   const facts = [...markdown.matchAll(/^\s+(\S.*?\S)\s{2,}[█·]+\s+\d+%\s+▼\s*(\d+%)\s*$/gm)]
@@ -218,6 +228,7 @@ export class ToolManager extends EventEmitter {
           info.installed = !!binary
           if (binary) info.version = await this.readVersion(binary)
           if (binary) info.stats = await this.rtkStats(binary)
+          if (binary) info.connected = { claude: await this.rtkShow(binary, false), codex: await this.rtkShow(binary, true) }
           if (!['x64', 'arm64'].includes(this.deps.arch ?? process.arch)) info.blocked = 'RTK binary installation supports Linux x64 and arm64.'
           info.detail = binary === this.binary ? 'App-managed binary. Connect it to each client below.'
             : binary ? `Found at ${binary}. Updates install a separate app-managed copy.` : 'Reduces command output before the agent reads it.'
@@ -255,6 +266,11 @@ export class ToolManager extends EventEmitter {
   private async rtkStats(binary: string): Promise<ToolStats | null> {
     const r = await this.runner(binary, ['gain', '--daily', '--format', 'json'])
     try { return r.code === 0 ? parseRtkGain(JSON.parse(r.stdout)) : null } catch { return null }
+  }
+
+  private async rtkShow(binary: string, codex: boolean): Promise<boolean | null> {
+    const r = await this.runner(binary, ['init', '-g', ...(codex ? ['--codex'] : []), '--show'])
+    return r.code === 0 ? rtkConnected(r.stdout, codex) : null
   }
 
   private async ponytailStats(version: string | null): Promise<ToolStats | null> {

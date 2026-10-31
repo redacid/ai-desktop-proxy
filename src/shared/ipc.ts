@@ -121,6 +121,8 @@ export interface ToolInfo {
   error: string | null
   blocked: string | null
   detail: string
+  /** RTK only: whether `rtk init --show` reports its global hooks in place per client (null = unknown). */
+  connected?: { claude: boolean | null; codex: boolean | null }
   /** What the tool reports it achieved; null when it reports nothing readable. */
   stats: ToolStats | null
 }

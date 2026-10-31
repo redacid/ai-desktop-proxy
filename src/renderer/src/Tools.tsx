@@ -95,10 +95,11 @@ export function Tools({ disabled, onBusy, onLogStart }: {
             <div className="actions">
               {tool.installed === false && <button className="primary" disabled={locked || !!tool.blocked} onClick={() => void act(tool.id, 'install')}>Install</button>}
               {tool.updateAvailable && <button className="primary" disabled={locked || !!tool.blocked} onClick={() => void act(tool.id, 'update')}>Update to {tool.latest}</button>}
-              {tool.id === 'rtk' && tool.installed === true && <>
-                <button disabled={locked || !!tool.blocked} onClick={() => void act('rtk', 'connect-claude')}>Connect to Claude Code</button>
-                <button disabled={locked || !!tool.blocked} onClick={() => void act('rtk', 'connect-codex')}>Connect to Codex</button>
-              </>}
+              {tool.id === 'rtk' && tool.installed === true && ([['claude', 'Claude Code'], ['codex', 'Codex']] as const).map(([client, label]) =>
+                tool.connected?.[client]
+                  ? <span key={client} className="badge">connected to {label}</span>
+                  : <button key={client} disabled={locked || !!tool.blocked} onClick={() => void act('rtk', `connect-${client}`)}>Connect to {label}</button>
+              )}
             </div>
             <p className="detail">Version check: {tool.checkedAt ? new Date(tool.checkedAt).toLocaleString() : 'not checked yet'}</p>
           </article>
