@@ -290,7 +290,8 @@ export class ToolManager extends EventEmitter {
       }
       const codex = action === 'connect-codex'
       if (!(await this.find(codex ? 'codex' : 'claude'))) throw new Error(`Install ${codex ? 'Codex' : 'Claude Code'} first`)
-      const args = ['init', '-g', ...(codex ? ['--codex'] : []), '--auto-patch', '--no-trust-filters']
+      // rtk refuses --auto-patch with --codex; Codex's hooks.json is patched without it.
+      const args = ['init', '-g', ...(codex ? ['--codex'] : ['--auto-patch']), '--no-trust-filters']
       const preview = await this.runner(binary, [...args, '--dry-run'])
       if (preview.code !== 0) throw new Error(preview.stderr || preview.stdout)
       commands.push({ cmd: binary, args })

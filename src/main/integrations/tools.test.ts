@@ -230,7 +230,7 @@ describe('approved actions', () => {
     const f = await fixture()
     const plan = await f.manager.plan('rtk', 'connect-codex')
     expect(plan.detail).toContain('[dry-run]')
-    expect(plan.commands).toEqual([{ cmd: '/fake/rtk', args: ['init', '-g', '--codex', '--auto-patch', '--no-trust-filters'] }])
+    expect(plan.commands).toEqual([{ cmd: '/fake/rtk', args: ['init', '-g', '--codex', '--no-trust-filters'] }])
     expect(f.stream).not.toHaveBeenCalled()
     await f.manager.execute(plan, () => {})
     expect(f.stream).toHaveBeenCalledOnce()
