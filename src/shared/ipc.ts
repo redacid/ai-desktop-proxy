@@ -107,6 +107,28 @@ export interface CompressorInfo {
 
 export type CompressorAction = 'install' | 'setup' | 'start' | 'stop' | 'restart' | 'remove'
 
+export type ToolId = 'headroom' | 'rtk' | 'ponytail-claude' | 'ponytail-codex'
+export type ToolAction = 'install' | 'update' | 'connect-claude' | 'connect-codex'
+
+export interface ToolInfo {
+  id: ToolId
+  name: string
+  installed: boolean | null // null = detection failed, not proof of absence
+  version: string | null
+  latest: string | null
+  updateAvailable: boolean
+  checkedAt: string | null
+  error: string | null
+  blocked: string | null
+  detail: string
+}
+
+export interface ToolActionResult {
+  ok: boolean
+  error?: string
+  tools: ToolInfo[]
+}
+
 /** Built-in headroom compressors that `--compressor` can select (headroom 0.42). */
 export const HEADROOM_COMPRESSORS = [
   'smart_crusher', 'kompress', 'code_aware', 'search', 'log', 'tabular', 'config', 'html', 'image'
@@ -197,7 +219,11 @@ export const IPC = {
   compressorLogs: 'compressor:logs',
   requestDetail: 'compressor:request-detail',
   getSettings: 'settings:get',
-  saveSettings: 'settings:save'
+  saveSettings: 'settings:save',
+  getTools: 'tools:get',
+  checkTools: 'tools:check',
+  toolAction: 'tools:action',
+  toolsChanged: 'tools:changed'
 } as const
 
 export interface Api {
@@ -211,6 +237,10 @@ export interface Api {
   requestDetail(id: string): Promise<RequestDetail>
   getSettings(): Promise<UserSettings>
   saveSettings(settings: UserSettings): Promise<ActionResult>
+  getTools(): Promise<ToolInfo[]>
+  checkTools(): Promise<ToolInfo[]>
+  toolAction(id: ToolId, action: ToolAction): Promise<ToolActionResult>
+  onTools(listener: (tools: ToolInfo[]) => void): () => void
   onStatus(listener: (status: AppStatus) => void): () => void
   onInstallLog(listener: (line: string) => void): () => void
 }

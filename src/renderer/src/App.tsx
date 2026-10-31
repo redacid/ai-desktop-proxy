@@ -12,6 +12,7 @@ import type {
 } from '@shared/ipc'
 import { HeadroomSettings } from './HeadroomSettings'
 import { RecentRequests } from './RecentRequests'
+import { Tools } from './Tools'
 
 const int = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 })
 const usd = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
@@ -265,6 +266,7 @@ export function App(): React.JSX.Element {
   const [busyAction, setBusyAction] = useState<{ target: 'proxy' | 'compressor'; action: Action } | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [installLog, setInstallLog] = useState<string[]>([])
+  const [toolBusy, setToolBusy] = useState(false)
 
   useEffect(() => {
     void window.api.getStatus().then(setStatus)
@@ -336,7 +338,7 @@ export function App(): React.JSX.Element {
               buttons={proxyButtons(status.proxyInfo)}
               showLogs={status.proxyInfo.unit !== 'missing'}
               loadLogs={() => window.api.proxyLogs()}
-              busy={busyAction?.target === 'proxy' ? busyAction.action : busyAction ? 'start' : null}
+              busy={busyAction?.target === 'proxy' ? busyAction.action : busyAction || toolBusy ? 'start' : null}
               onAction={(a) => void runAction('proxy', a)}
               note={status.proxyInfo.listening && status.compressor.health === 'down'
                 ? 'headroom is down: API requests go straight to Anthropic and OpenAI, without compression.'
@@ -350,7 +352,7 @@ export function App(): React.JSX.Element {
               buttons={compressorButtons(status.compressorInfo)}
               showLogs={status.compressorInfo.unit !== 'missing'}
               loadLogs={() => window.api.compressorLogs()}
-              busy={busyAction?.target === 'compressor' ? busyAction.action : busyAction ? 'start' : null}
+              busy={busyAction?.target === 'compressor' ? busyAction.action : busyAction || toolBusy ? 'start' : null}
               onAction={(a) => void runAction('compressor', a)}
             />
           )}
@@ -358,16 +360,17 @@ export function App(): React.JSX.Element {
         <Card title="Clients" status={status.clients}>
           <ul className="clients">
             {status.clientList.map((c) => (
-              <Client key={c.id} client={c} busy={busy} onToggle={(on) => void toggle(c.id, on)} />
+              <Client key={c.id} client={c} busy={busy || toolBusy || busyAction !== null} onToggle={(on) => void toggle(c.id, on)} />
             ))}
           </ul>
         </Card>
       </div>
+      <Tools disabled={busy || toolBusy || busyAction !== null} onBusy={setToolBusy} onLogStart={() => setInstallLog([])} />
       {installLog.length > 0 && (
         <section className="card install">
           <header>
             <h2>Install log</h2>
-            {busyAction === null && <button className="link" onClick={() => setInstallLog([])}>Close</button>}
+            {busyAction === null && !toolBusy && <button className="link" onClick={() => setInstallLog([])}>Close</button>}
           </header>
           <LiveLog lines={installLog} />
         </section>

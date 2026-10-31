@@ -80,6 +80,7 @@ port>/v1`. Codex talks plain HTTP and WebSocket to it, so no certificate is invo
 | `compressors/headroom.ts` | `HeadroomBackend`: `/health`, `/stats-history` and `/transformations/feed` parsing (recent requests and their bodies) |
 | `compressors/headroom-service.ts` | `HeadroomService`: install/run headroom as a user service, external detection |
 | `compressors/headroom-options.ts` | headroom options: defaults, validation, mapping to `headroom proxy` flags and service environment, argument splitting |
+| `integrations/tools.ts` | Independent tool detection, durable update-check cadence, reviewable action plans, native plugin/RTK setup and verified RTK downloads |
 | `status.ts` | `StatusMonitor` (polling, combined health) and the status-line functions for each card |
 | `store.ts` | `AppStore`: `state.json` with settings and per-client `{ enabled, applied }` |
 | `settings.ts` | Validation of user settings |
@@ -103,12 +104,39 @@ it is defined there.
 | `proxy:install-log` | main → renderer | one line of install output (both services) |
 | `settings:get`, `settings:save` | invoke | `UserSettings` → `ActionResult` |
 | `compressor:request-detail` | invoke | request id → `RequestDetail` (messages from the client, sent to the provider, response) |
+| `tools:get`, `tools:check` | invoke | → `ToolInfo[]` (cached state / forced registry and installation check) |
+| `tools:action` | invoke | `(ToolId, ToolAction)` → `ToolActionResult`, after a native confirmation |
+| `tools:changed` | main → renderer | `ToolInfo[]` after a check or action |
 
 Recent requests travel with `AppStatus.stats.recent` as metrics only; bodies are fetched on demand through
 `compressor:request-detail`, because they can be large and are only kept when headroom runs with `--log-messages`.
 The renderer turns messages into readable text in `src/renderer/src/messages.ts` (pure, unit tested).
 
 ## Client state machine
+
+### Independent tool lifecycle
+
+`ToolManager` is separate from `ClientManager` and `StatusMonitor`. Optional RTK/Ponytail availability does
+not change proxy health and their hooks survive proxy stop/remove. Main-process `exclusive` serializes
+approved tool actions with service/settings actions. The renderer cannot supply commands or download URLs;
+it supplies only validated tool/action identifiers. A plan is prepared read-only, including RTK's dry-run,
+and approved before any mutation. Checks share in-flight work; background checks do not mutate tools.
+
+The manager polls installations once per minute and stable release sources at most once per six hours,
+unless explicitly forced. `tool-updates.json` persists release values and attempt timestamps across restarts,
+including backoff after failed checks. Registry failure preserves the previous release value; malformed
+native CLI output produces an unknown installation state and disables mutations. Native client lists may
+also consult the client's configured plugin catalogs. No updater approval is inferred from elapsed time.
+
+RTK release archives are downloaded from a version-specific official URL, bounded in size, SHA-256 checked,
+and decompressed with a size limit. Only the regular root `rtk` entry is read; archive paths are never
+extracted to the filesystem. A staged binary must report the expected version before atomic replacement.
+The user-bin symlink is created exclusively and must remain ours; foreign binaries are never overwritten.
+Native `rtk init` owns hook setup; native client plugin commands own Ponytail setup. There is no generic
+rewrite of client configs and no automatic hook-trust approval. Headroom ownership is rechecked before
+package mutation and before restarting an active service. Stopped services remain stopped after updates.
+
+### Routing state machine
 
 `ClaudeCodeAdapter.inspect` (and `CodexAdapter.inspect` likewise) classifies the config as `applied`, `absent`, `partial`, `conflict`, `missing` or
 `error`. Values equal to the last `AppliedRecord` (for example the previous port) count as ours, so a port change

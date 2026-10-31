@@ -48,6 +48,22 @@ touch your real `~/.claude`, systemd or network:
 - `ProxyManager`/`HeadroomService` pieces: unit rendering and quoting, outdated/legacy detection, port owner.
 - `parseStatsHistory` against `examples/headroom-stats.json`; `parseFeed`/`detailFromFeed` and the renderer's
   `messages.ts` against `examples/headroom-feed.json`.
+- `ToolManager`: injected registry requests, command runners, clock, client discovery and headroom lifecycle;
+  temporary roots for cache, binaries and symlinks. Covers approval cancellation, six-hour persistence/backoff,
+  per-client plugin detection, native command plans, source conflicts, external/stopped services, checksum
+  failure, archive entry restrictions and preserving a working binary on failed verification.
+
+## Tool integrations
+
+`src/main/integrations/tools.ts` manages package/plugin presence and updates independently of API routing.
+Add any new IPC types/channels to `src/shared/ipc.ts`; UI lives in `src/renderer/src/Tools.tsx`. Do not add
+optional-tool failures to overall proxy health. Installation and update actions must prepare a reviewable
+plan and pass through `approveToolAction` and the main process's serialized confirmation path.
+
+Tests must inject `ToolDependencies` and use temporary `root`/`home` paths. Never run real client installers,
+network fetches, systemd actions or writes to user config in unit tests. Native CLI compatibility is checked
+from actual command help and schemas: notably Codex refreshes a marketplace with `plugin marketplace upgrade`
+and installs/reinstalls with `plugin add`; it has no `plugin update` subcommand in the inspected runtime.
 
 ### End-to-end without systemd
 

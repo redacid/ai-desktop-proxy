@@ -87,6 +87,47 @@ Codex on only while it can see its own proxy service holding that port. If the s
 port, the app removes the line at its next status check (every 5 s with the window open, 30 s in the tray), and
 puts it back once the service holds the port again. A proxy restart therefore takes Codex off for a moment.
 
+### Tools & updates
+
+This section checks headroom, RTK, and the official Ponytail plugin separately for Claude Code and Codex.
+Installation presence is checked at startup and every minute while the app runs. New stable versions are
+checked at startup when the cached result is older than six hours, then every six hours. **Check for updates**
+forces a fresh check. The cadence survives app restarts. A failed check shows an error and keeps the last
+known version; a detection error is **unknown**, never treated as proof that a tool is missing.
+
+**Install** appears for missing tools; **Update to …** appears when a newer stable version is known.
+Nothing installs or updates automatically. Each action first opens a confirmation with the commands or
+download URLs and file changes. Cancel makes no installation or configuration changes. Progress and errors
+appear in the Install log. Missing optional tools do not turn the proxy's health red.
+
+- **headroom:** requires `uv`. Installs a specific checked release with
+  `uv tool install --upgrade --python 3.13 "headroom-ai[all]==<version>"`. An active app-managed service
+  restarts afterward; a stopped service stays stopped. For a new installation, use **Set up & start** on
+  the Compressor card afterward. Externally managed headroom and remote URLs are left alone. The original
+  Compressor-card **Install headroom** action still installs and starts the service together.
+- **RTK:** downloads the official Linux x64 or arm64 release archive and `checksums.txt`, verifies SHA-256,
+  and installs a staged, version-checked binary in the app's `userData/tools/rtk`. It creates
+  `~/.local/bin/rtk` as a symlink to that binary. It never replaces a foreign file or symlink at that path;
+  update such an installation with its owner/package manager, or move it yourself first. No root access
+  is needed. Coding clients must have `~/.local/bin` on PATH before other RTK installations; restart clients
+  after installation. **Connect to Claude Code / Codex** previews the native `rtk init` changes, then asks
+  before registering global hooks and instructions. Custom project filters are not automatically trusted.
+  Reconnection is explicit; stopping the API proxy does not remove RTK hooks.
+- **Ponytail:** requires the corresponding client CLI with plugin support. Uses the official
+  `DietrichGebert/ponytail` marketplace and the client's native install/update commands. Only the Ponytail
+  marketplace is refreshed, not every marketplace or plugin. A different marketplace already named
+  `ponytail` is a conflict, not overwritten. Installation and updates may run plugin lifecycle code, as with
+  installation directly in the client. Restart client sessions after changes. In Codex, review and trust
+  Ponytail hooks through `/hooks`; this app does not approve hook trust. An installed but disabled plugin
+  is reported as disabled; enable it in the client. Ponytail modes remain controlled by `/ponytail` in the
+  client; the app does not rewrite project `AGENTS.md` with Ponytail instructions.
+
+Version sources are PyPI (`headroom-ai`), GitHub Releases (`rtk-ai/rtk`), and the official Ponytail plugin
+manifest. GitHub rate limits, an offline machine, or unsupported client CLI output can prevent a check;
+the error is shown without attempting an installation. After a partial native-command failure, review
+the log: earlier steps may already have completed. Tool versions and installation paths are distinct
+from a running headroom process's version until that process is restarted.
+
 ### headroom savings
 
 Lifetime totals (tokens saved, money saved by compression and by cache, requests), the current headroom session,
@@ -168,11 +209,20 @@ options do not reach that headroom.
 | `~/.codex/config.toml` | `openai_base_url` and the comment line above it |
 | `~/.codex/config.toml.bak-claude-desktop-proxy` | One-time backup made before the first change |
 | `~/.config/claude-desktop-proxy/state.json` | App settings and what was written into each client |
+| `~/.config/claude-desktop-proxy/tool-updates.json` | Latest known tool versions and update-check attempt times |
+| `~/.config/claude-desktop-proxy/tools/rtk` | App-managed RTK binary; a temporary `rtk.staging` file is used for verification |
+| `~/.local/bin/rtk` | Symlink to the app-managed RTK, created only when absent |
 | `~/.config/claude-desktop-proxy/cdp_addon.py` | The mitmproxy addon the service loads |
 | `~/.config/systemd/user/claude-desktop-proxy.service` | Proxy service |
 | `~/.config/systemd/user/claude-desktop-proxy-headroom.service` | headroom service (only if the app runs headroom) |
 | `~/.config/autostart/claude-desktop-proxy.desktop` | Start at login (only if enabled) |
 | `~/.mitmproxy/` | mitmproxy's CA; trusted only by clients the app routes, never by the system |
+
+Approved RTK connection commands additionally manage the client's global hooks and instruction files
+(`settings.json`, `CLAUDE.md`, `RTK.md`, RTK hook/filter files for Claude; `$CODEX_HOME/hooks.json`,
+`AGENTS.md`, `RTK.md` for Codex). Their native dry-run lists the changes before approval. Approved Ponytail
+commands manage the client's marketplace registry, plugin cache and enablement through its own CLI.
+These client-managed artifacts are not removed by **Remove** on either proxy service card.
 
 ## Troubleshooting
 

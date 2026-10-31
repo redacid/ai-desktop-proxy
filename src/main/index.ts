@@ -1,11 +1,15 @@
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import {
   IPC,
   type ActionResult,
   type CompressorAction,
   type ProxyAction,
-  type UserSettings
+  type UserSettings,
+  type ToolId,
+  type ToolAction,
+  type ToolActionResult
 } from '@shared/ipc'
 import { Autostart } from './autostart'
 import { ClaudeCodeAdapter } from './clients/claude-code'
@@ -23,6 +27,7 @@ import { compressorStatus, proxyStatus, StatusMonitor } from './status'
 import { AppStore } from './store'
 import { AppTray } from './tray'
 import { createMainWindow } from './window'
+import { approveToolAction, ToolManager } from './integrations/tools'
 
 const FAST_POLL_MS = 5_000 // window visible
 const SLOW_POLL_MS = 30_000 // window hidden in the tray
@@ -38,6 +43,10 @@ let portsSeen: string | null = null
 const store = new AppStore(join(app.getPath('userData'), 'state.json'))
 const headroom = (): HeadroomBackend => new HeadroomBackend(store.settings.headroomUrl)
 const headroomService = new HeadroomService(() => store.settings, () => headroom().answering())
+const tools = new ToolManager({
+  root: app.getPath('userData'), home: homedir(),
+  headroomInfo: () => headroomService.info(), setupHeadroom: () => headroomService.setup()
+})
 const proxy = new ProxyManager(() => store.settings, {
   unitFile: defaultUnitFile(),
   addonSource: resourcePath('mitmproxy', 'cdp_addon.py'),
@@ -223,6 +232,7 @@ const proxyAction = (action: ProxyAction): Promise<ActionResult> =>
 
 /** headroom actions. Stopping it needs no client changes: the proxy falls back to the API. */
 async function runCompressorAction(action: CompressorAction): Promise<string | null> {
+  if ((await headroomService.info()).managed === 'external') return 'headroom is managed outside this app; nothing changed'
   const { headroomUrl } = store.settings
   const ep = localEndpoint(headroomUrl)
   switch (action) {
@@ -275,6 +285,19 @@ const compressorAction = (action: CompressorAction): Promise<ActionResult> =>
       () => runCompressorAction(action === 'install' ? 'setup' : action)
     )
   )
+
+async function toolAction(id: ToolId, action: ToolAction): Promise<ToolActionResult> {
+  const result = await exclusive(async () => {
+    const approved = await approveToolAction(tools, id, action, (plan) => confirm(
+      `${action.startsWith('connect-') ? 'Connect' : action === 'update' ? 'Update' : 'Install'} ${tools.current.find((t) => t.id === id)?.name ?? id}?`,
+      plan.detail,
+      action.startsWith('connect-') ? 'Connect' : action === 'update' ? 'Update' : 'Install'
+    ), installLog)
+    if (!approved) return ''
+    return null
+  })
+  return { ok: result.ok, error: result.error, tools: tools.current }
+}
 
 async function getSettings(): Promise<UserSettings> {
   const { proxyPort, codexPort, headroomUrl, headroom, autoRepair, checkIntervalSec } = store.settings
@@ -348,6 +371,10 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle(IPC.requestDetail, (_e, id: string) => headroom().detail(id))
     ipcMain.handle(IPC.getSettings, () => getSettings())
     ipcMain.handle(IPC.saveSettings, (_e, s: UserSettings) => saveSettings(s))
+    ipcMain.handle(IPC.getTools, () => tools.current)
+    ipcMain.handle(IPC.checkTools, () => tools.refresh(true))
+    ipcMain.handle(IPC.toolAction, (_e, id: ToolId, action: ToolAction) => toolAction(id, action))
+    tools.on('change', (items) => win?.webContents.send(IPC.toolsChanged, items))
 
     tray = new AppTray({
       show: showWindow,
@@ -375,6 +402,7 @@ if (!app.requestSingleInstanceLock()) {
     monitor.start(SLOW_POLL_MS)
     // --hidden starts straight into the tray (used for autostart on login).
     if (!process.argv.includes('--hidden')) showWindow()
+    void tools.start().catch((err) => console.error('Tool checks failed:', err))
   })
 
   // Keep running in the tray when every window is closed.
@@ -383,6 +411,7 @@ if (!app.requestSingleInstanceLock()) {
     quitting = true
     clients.stop()
     monitor.stop()
+    tools.stop()
     tray?.destroy()
   })
 }

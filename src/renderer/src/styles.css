@@ -154,3 +154,10 @@ code { font: 12px ui-monospace, monospace; }
 .compressors > span { grid-column: 1 / -1; font-weight: 600; font-size: 13px; }
 .settings input:disabled + span, .settings select:disabled { opacity: .5; }
 .settings select, .settings input[type="number"] { justify-self: start; width: 100%; }
+/* Optional client integrations do not change proxy health. */
+.tool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.tools { margin-top: 16px; }
+.tools > header { justify-content: space-between; }
+.tools > .detail { margin: 8px 0 14px; }
+.tool { min-width: 0; border: 1px solid var(--border, #333); border-radius: 8px; padding: 14px; }
+.tool .detail, .tool .note, .tool .error-inline { overflow-wrap: anywhere; white-space: pre-line; }
