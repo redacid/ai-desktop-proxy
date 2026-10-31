@@ -41,8 +41,9 @@ check.
 | Remove | service exists | Removes client settings, then stops and deletes the service. mitmproxy stays installed |
 | Logs | service exists | The last 80 journal lines |
 
-If headroom is down while the proxy runs, the card says so: API requests then go straight to Anthropic without
-compression, and Claude keeps working.
+If headroom is down while the proxy runs, the card says so: API requests then go straight to Anthropic (and Codex's to
+OpenAI or ChatGPT) without compression, and the clients keep working. The card also checks the second listener
+Codex uses and shows **Degraded** while only one of the two ports answers.
 
 ### Compressor (headroom)
 
@@ -70,6 +71,16 @@ what the app wrote. The badge shows what the config contains:
 Switching a client on is refused while the proxy is not listening: the client would fail every request.
 
 Changes reach only **new** client sessions; running sessions keep the environment they started with.
+
+| Client | What the switch writes |
+|---|---|
+| Claude Code | `HTTPS_PROXY`, `NODE_EXTRA_CA_CERTS` and `NO_PROXY` in the `env` block of `~/.claude/settings.json` |
+| Codex | `openai_base_url = "http://127.0.0.1:8878/v1"` as the first line of `~/.codex/config.toml` (or `$CODEX_HOME`), under a comment that says the app added it. Works for API-key and ChatGPT logins, CLI and desktop app |
+
+Codex shows **conflict** when its config already sets `openai_base_url` to something else, or sets
+`model_provider` to a provider other than `openai`: such traffic does not go to OpenAI, so the app cannot route it.
+A profile (`[profiles.*]`) with its own `openai_base_url` or `model_provider` also bypasses the proxy while it is
+selected. If you edit the app's line by hand, turning Codex off asks you to remove it yourself.
 
 ### headroom savings
 
@@ -111,6 +122,7 @@ requests in memory, so an older row may say it is no longer available.
 | Setting | Default | Notes |
 |---|---|---|
 | Proxy port | 8877 | 1024–65535. Changing it restarts the proxy and re-points routed clients |
+| Codex port | 8878 | 1024–65535, not the proxy port. The proxy's second listener, used as Codex's OpenAI base URL |
 | headroom URL | `http://127.0.0.1:6767` | Base URL without a path. Only a local `http://127.0.0.1`/`localhost` URL can be run by the app |
 | Check interval | 60 s | 10–3600 s |
 | Restore proxy settings | on | Auto-restore described above |
@@ -148,6 +160,8 @@ options do not reach that headroom.
 |---|---|
 | `~/.claude/settings.json` | `env.HTTPS_PROXY`, `env.NODE_EXTRA_CA_CERTS`, `env.NO_PROXY` (merged) |
 | `~/.claude/settings.json.bak-claude-desktop-proxy` | One-time backup made before the first change |
+| `~/.codex/config.toml` | `openai_base_url` and the comment line above it |
+| `~/.codex/config.toml.bak-claude-desktop-proxy` | One-time backup made before the first change |
 | `~/.config/claude-desktop-proxy/state.json` | App settings and what was written into each client |
 | `~/.config/claude-desktop-proxy/cdp_addon.py` | The mitmproxy addon the service loads |
 | `~/.config/systemd/user/claude-desktop-proxy.service` | Proxy service |
@@ -169,6 +183,9 @@ port, typically a `mitmdump` started by hand. The card names it ("held by mitmdu
 
 **Remote/cloud Claude sessions are not compressed.** They run on Anthropic's machines, not yours, so their
 traffic never reaches your proxy. Use Remote Control or local sessions for work that should be compressed.
+
+**Codex says "conflict" right after `headroom wrap codex`.** headroom's own wrapper writes `model_provider` and
+`openai_base_url` into the same file. Run `headroom unwrap codex`, then switch Codex on here.
 
 **Undo everything.** Switch clients off, **Remove** both services, then optionally
 `uv tool uninstall mitmproxy` and `uv tool uninstall headroom-ai`.

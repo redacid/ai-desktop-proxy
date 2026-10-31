@@ -124,10 +124,12 @@ describe('ProxyManager', () => {
     expect((await manager().info()).ours).toBe(true)
   })
 
-  it('passes the port and keeps the API-only decryption', () => {
-    const args = mitmdumpArgs({ proxyPort: 1234, headroomUrl: 'http://h:1' }, '/a.py')
-    expect(args.join(' ')).toContain('--listen-port 1234')
+  it('passes both ports and keeps the API-only decryption', () => {
+    const args = mitmdumpArgs({ proxyPort: 1234, codexPort: 1235, headroomUrl: 'http://h:1' }, '/a.py')
+    expect(args.join(' ')).toContain('--mode regular@1234')
+    expect(args.join(' ')).toContain('--mode reverse:https://api.openai.com@1235')
     expect(args).toContain('^api[.]anthropic[.]com:443$')
+    expect(args).toContain('^api[.]openai[.]com:443$')
     expect(args).toContain('connection_strategy=lazy')
   })
 })

@@ -1,7 +1,10 @@
 import type { ClientState } from '@shared/ipc'
 import type { ProxyEnv } from '../proxy-env'
 
-/** Exactly what we wrote into a client config, so removal undoes only our part. */
+/**
+ * Exactly what we wrote into a client config, so removal undoes only our part.
+ * A base-URL client (Codex) keeps its URL in proxyUrl and leaves the rest empty.
+ */
 export interface AppliedRecord {
   proxyUrl: string
   caFile: string
@@ -13,7 +16,7 @@ export interface Inspection {
   detail: string
 }
 
-/** One AI client (Claude Code now; Codex, Cursor later). */
+/** One AI client (Claude Code, Codex; Cursor later). */
 export interface ClientAdapter {
   readonly id: string
   readonly name: string

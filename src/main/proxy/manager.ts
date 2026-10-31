@@ -12,6 +12,8 @@ export { parseSsOwner, PortTakenError } from './tools'
 
 export const UNIT = 'claude-desktop-proxy.service' // same name as legacy/cdp.sh, so setup migrates it
 export const API_HOSTS_REGEX = '^api[.]anthropic[.]com:443$'
+export const OPENAI_HOSTS_REGEX = '^api[.]openai[.]com:443$'
+export const OPENAI_UPSTREAM = 'https://api.openai.com'
 
 export interface ProxyPaths {
   unitFile: string
@@ -24,12 +26,15 @@ export function defaultUnitFile(): string {
 }
 
 /** mitmdump arguments; everything not about routing stays at mitmproxy defaults. */
-export function mitmdumpArgs(s: Pick<Settings, 'proxyPort' | 'headroomUrl'>, addon: string): string[] {
+export function mitmdumpArgs(s: Pick<Settings, 'proxyPort' | 'codexPort' | 'headroomUrl'>, addon: string): string[] {
   return [
     '--listen-host', '127.0.0.1',
-    '--listen-port', String(s.proxyPort),
-    // Only the API is decrypted; every other host is a plain CONNECT tunnel.
+    // HTTPS_PROXY for Claude Code; a reverse listener for Codex, which only takes a base URL.
+    '--mode', `regular@${s.proxyPort}`,
+    '--mode', `reverse:${OPENAI_UPSTREAM}@${s.codexPort}`,
+    // Only the APIs are decrypted; every other host is a plain CONNECT tunnel.
     '--allow-hosts', API_HOSTS_REGEX,
+    '--allow-hosts', OPENAI_HOSTS_REGEX,
     '-s', addon,
     '--set', `cdp_upstream=${s.headroomUrl}`,
     // Forward SSE replies as they arrive instead of buffering them.
@@ -63,14 +68,19 @@ export class ProxyManager {
   }
 
   /** Who listens on the proxy port (same-user processes only; ss cannot see others'). */
-  portOwner(): Promise<PortOwner | null> {
-    return portOwner(this.settings().proxyPort, this.runner)
+  portOwner(port = this.settings().proxyPort): Promise<PortOwner | null> {
+    return portOwner(port, this.runner)
   }
 
-  /** The port's owner when it is not our service, or null. */
-  async foreignOwner(): Promise<PortOwner | null> {
-    const [owner, mainPid] = await Promise.all([this.portOwner(), this.systemd.mainPid()])
-    return owner && owner.pid !== mainPid ? owner : null
+  /** The first of our ports held by something other than our service, or null. */
+  async foreignOwner(): Promise<{ port: number; owner: PortOwner } | null> {
+    const { proxyPort, codexPort } = this.settings()
+    const mainPid = await this.systemd.mainPid()
+    for (const port of [proxyPort, codexPort]) {
+      const owner = await this.portOwner(port)
+      if (owner && owner.pid !== mainPid) return { port, owner }
+    }
+    return null
   }
 
   private async expectedUnit(mitmdump: string): Promise<string> {
@@ -83,10 +93,11 @@ export class ProxyManager {
 
   async info(): Promise<ProxyInfo> {
     const s = this.settings()
-    const [mitmdump, uv, listening, caExists, active, owner, mainPid] = await Promise.all([
+    const [mitmdump, uv, listening, codexListening, caExists, active, owner, mainPid] = await Promise.all([
       this.findMitmdump(),
       this.findUv(),
       this.listening(s.proxyPort),
+      this.listening(s.codexPort),
       exists(s.caFile),
       this.systemd.isActive(),
       this.portOwner(),
@@ -104,7 +115,7 @@ export class ProxyManager {
     }
     // Without ss output, trust systemd: an active service is assumed to own the port.
     const ours = owner ? owner.pid === mainPid : active
-    return { port: s.proxyPort, mitmdump, uv, unit, active, listening, caExists, owner, ours }
+    return { port: s.proxyPort, codexPort: s.codexPort, mitmdump, uv, unit, active, listening, codexListening, caExists, owner, ours }
   }
 
   private async addonIsCurrent(): Promise<boolean> {
@@ -166,8 +177,8 @@ export class ProxyManager {
 
   /** Throws PortTakenError instead of starting a service that would crash-loop on the port. */
   private async ensurePortFree(): Promise<void> {
-    const owner = await this.foreignOwner()
-    if (owner) throw new PortTakenError(this.settings().proxyPort, owner, 'proxy')
+    const taken = await this.foreignOwner()
+    if (taken) throw new PortTakenError(taken.port, taken.owner, 'proxy')
   }
 
   /** mitmdump creates its CA on first start; both port and CA must be there. */
@@ -175,11 +186,11 @@ export class ProxyManager {
     const s = this.settings()
     const deadline = Date.now() + timeoutMs
     while (Date.now() < deadline) {
-      if ((await this.listening(s.proxyPort)) && (await exists(s.caFile))) return
+      if ((await this.listening(s.proxyPort)) && (await this.listening(s.codexPort)) && (await exists(s.caFile))) return
       await new Promise((r) => setTimeout(r, 500))
     }
     const tail = await this.logs(15)
-    throw new Error(`proxy did not start on 127.0.0.1:${s.proxyPort} within ${timeoutMs / 1000}s\n${tail}`)
+    throw new Error(`proxy did not start on 127.0.0.1:${s.proxyPort} and :${s.codexPort} within ${timeoutMs / 1000}s\n${tail}`)
   }
 }
 

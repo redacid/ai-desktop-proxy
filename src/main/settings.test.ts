@@ -3,7 +3,7 @@ import { desktopArg, desktopEntry } from './autostart'
 import { DEFAULT_HEADROOM_OPTIONS } from './compressors/headroom-options'
 import { normalizeUrl, validateSettings } from './settings'
 
-const good = { proxyPort: 8877, headroomUrl: 'http://127.0.0.1:6767', headroom: DEFAULT_HEADROOM_OPTIONS, autoRepair: true, checkIntervalSec: 60, autostart: false }
+const good = { proxyPort: 8877, codexPort: 8878, headroomUrl: 'http://127.0.0.1:6767', headroom: DEFAULT_HEADROOM_OPTIONS, autoRepair: true, checkIntervalSec: 60, autostart: false }
 
 describe('validateSettings', () => {
   it('accepts the defaults', () => {
@@ -17,6 +17,9 @@ describe('validateSettings', () => {
     expect(validateSettings({ ...good, headroomUrl: 'http://127.0.0.1:6767/v1' })).toMatch(/path/)
     expect(validateSettings({ ...good, headroomUrl: 'http://127.0.0.1:8877' })).toMatch(/same port/)
     expect(validateSettings({ ...good, checkIntervalSec: 5 })).toMatch(/interval/)
+    expect(validateSettings({ ...good, codexPort: 8877 })).toMatch(/differ/)
+    expect(validateSettings({ ...good, codexPort: 1 })).toMatch(/Codex port/)
+    expect(validateSettings({ ...good, headroomUrl: 'http://127.0.0.1:8878' })).toMatch(/same port/)
   })
   it('trims a trailing slash', () => {
     expect(normalizeUrl('http://127.0.0.1:6767/')).toBe('http://127.0.0.1:6767')

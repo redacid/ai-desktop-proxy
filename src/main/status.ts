@@ -31,7 +31,8 @@ export function proxyStatus(info: ProxyInfo): ComponentStatus {
       return { health: 'degraded', detail: `${where} is held by ${who}, not by our service; stop it, then Restart` }
     }
     if (!info.caExists) return { health: 'degraded', detail: 'CA certificate is missing' }
-    return { health: 'ok', detail: `listening on ${where}` }
+    if (!info.codexListening) return { health: 'degraded', detail: `listening on ${where}, but not on :${info.codexPort} for Codex; Restart` }
+    return { health: 'ok', detail: `listening on ${where} and :${info.codexPort} (Codex)` }
   }
   if (!info.mitmdump) return { health: 'down', detail: 'mitmproxy is not installed' }
   if (info.unit === 'missing') return { health: 'down', detail: 'service is not set up' }

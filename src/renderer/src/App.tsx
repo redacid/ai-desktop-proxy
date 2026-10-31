@@ -171,6 +171,11 @@ function SettingsPanel({ onClose, onSaved, headroomExternal }: {
         <small>mitmproxy listens on 127.0.0.1 at this port. Changing it restarts the proxy and updates routed clients.</small>
       </label>
       <label>
+        <span>Codex port</span>
+        <input type="number" min={1024} max={65535} value={form.codexPort} onChange={(e) => set('codexPort', Number(e.target.value))} />
+        <small>A second mitmproxy listener that Codex uses as its OpenAI base URL, because Codex cannot use an HTTPS proxy.</small>
+      </label>
+      <label>
         <span>headroom URL</span>
         <input type="url" value={form.headroomUrl} onChange={(e) => set('headroomUrl', e.target.value)} />
         <small>Where the proxy sends API requests. A local URL can be run by this app.</small>
@@ -334,7 +339,7 @@ export function App(): React.JSX.Element {
               busy={busyAction?.target === 'proxy' ? busyAction.action : busyAction ? 'start' : null}
               onAction={(a) => void runAction('proxy', a)}
               note={status.proxyInfo.listening && status.compressor.health === 'down'
-                ? 'headroom is down: API requests go straight to Anthropic, without compression.'
+                ? 'headroom is down: API requests go straight to Anthropic and OpenAI, without compression.'
                 : null}
             />
           )}

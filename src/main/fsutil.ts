@@ -21,11 +21,18 @@ export async function resolveTarget(path: string): Promise<string> {
 }
 
 /**
- * Writes JSON atomically: a uniquely named temp file next to the real target,
- * with the target's permissions, then rename. Symlinks are kept, Unicode is
- * written as-is, and the file ends with a newline.
+ * Writes JSON atomically (see writeTextAtomic). Unicode is written as-is and
+ * the file ends with a newline.
  */
-export async function writeJsonAtomic(path: string, data: unknown, fallbackMode = 0o600): Promise<void> {
+export function writeJsonAtomic(path: string, data: unknown, fallbackMode = 0o600): Promise<void> {
+  return writeTextAtomic(path, JSON.stringify(data, null, 2) + '\n', fallbackMode)
+}
+
+/**
+ * Writes text atomically: a uniquely named temp file next to the real target,
+ * with the target's permissions, then rename. Symlinks are kept.
+ */
+export async function writeTextAtomic(path: string, text: string, fallbackMode = 0o600): Promise<void> {
   const target = await resolveTarget(path)
   let mode = fallbackMode
   try {
@@ -35,7 +42,7 @@ export async function writeJsonAtomic(path: string, data: unknown, fallbackMode 
   }
   const tmp = join(dirname(target), `.${basename(target)}.${randomBytes(6).toString('hex')}.tmp`)
   try {
-    await fs.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', { encoding: 'utf8', mode })
+    await fs.writeFile(tmp, text, { encoding: 'utf8', mode })
     await fs.chmod(tmp, mode) // writeFile's mode is filtered by umask
     await fs.rename(tmp, target)
   } catch (err) {

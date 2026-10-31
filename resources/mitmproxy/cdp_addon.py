@@ -4,6 +4,11 @@ Sends decrypted api.anthropic.com requests to the compressor (headroom) while it
 is healthy, and lets them go straight to the API when it is not, so Claude keeps
 working without compression instead of failing with 502.
 
+Codex cannot use an HTTPS proxy, so it talks to a second, reverse-mode listener
+whose upstream is api.openai.com. Those requests go to the compressor too; when it
+is down they go to api.openai.com, or for a ChatGPT login (a ChatGPT-Account-Id
+header) to chatgpt.com/backend-api/codex, where Codex would send them itself.
+
 Options (set with --set):
   cdp_upstream        compressor base URL, e.g. http://127.0.0.1:6767
   cdp_health_path     health endpoint on the compressor (default /health)
@@ -17,17 +22,47 @@ import urllib.request
 from urllib.parse import urlsplit
 
 API_HOST = "api.anthropic.com"
+OPENAI_HOST = "api.openai.com"
+CHATGPT_HOST = "chatgpt.com"
+CODEX_PREFIX = "/backend-api/codex"
 log = logging.getLogger(__name__)
 
 
 def route(host: str, upstream: str, healthy: bool) -> tuple[str, str, int] | None:
     """(scheme, host, port) to send the request to, or None to leave it unchanged."""
-    if host != API_HOST or not upstream or not healthy:
+    if host not in (API_HOST, OPENAI_HOST) or not upstream or not healthy:
         return None
     u = urlsplit(upstream)
     if u.scheme not in ("http", "https") or not u.hostname:
         return None
     return u.scheme, u.hostname, u.port or (443 if u.scheme == "https" else 80)
+
+
+def chatgpt_path(path: str) -> str | None:
+    """chatgpt.com path for a Codex request made against our /v1 base URL, or None."""
+    for prefix in ("/v1/", "/v1?"):
+        if path.startswith(prefix):
+            return CODEX_PREFIX + path[3:]
+    return CODEX_PREFIX if path == "/v1" else None
+
+
+def plan(host: str, path: str, reverse: bool, chatgpt: bool, upstream: str,
+         healthy: bool) -> tuple[str, str, int, str] | None:
+    """(scheme, host, port, path) to send a request to, or None to leave it unchanged.
+
+    OpenAI requests are ours only on the reverse listener; a Claude client that
+    CONNECTs to api.openai.com through the regular one is left alone.
+    """
+    if host == OPENAI_HOST and not reverse:
+        return None
+    target = route(host, upstream, healthy)
+    if target is not None:
+        return (*target, path)
+    if host == OPENAI_HOST and chatgpt:
+        codex_path = chatgpt_path(path)
+        if codex_path is not None:
+            return "https", CHATGPT_HOST, 443, codex_path
+    return None
 
 
 # Never send the health check through HTTP(S)_PROXY from the service environment.
@@ -78,13 +113,19 @@ class CompressorRoute:
         # the server chosen here, before the request hook would run.
         from mitmproxy import ctx
 
-        target = route(flow.request.pretty_host, ctx.options.cdp_upstream, self.healthy)
+        reverse = flow.client_conn.proxy_mode.type_name == "reverse"
+        # On the reverse listener the destination is the mode's upstream; pretty_host
+        # would be whatever Host the client sent (127.0.0.1:<port>).
+        api_host = flow.request.host if reverse else flow.request.pretty_host
+        target = plan(api_host, flow.request.path, reverse, "chatgpt-account-id" in flow.request.headers,
+                      ctx.options.cdp_upstream, self.healthy)
         if target is None:
             return
-        scheme, host, port = target
-        # Keep the Host header as api.anthropic.com; the compressor forwards it upstream.
+        scheme, host, port, path = target
         flow.request.scheme, flow.request.host, flow.request.port = scheme, host, port
-        flow.request.host_header = API_HOST
+        flow.request.path = path
+        # Keep the API's Host header; the compressor forwards it upstream.
+        flow.request.host_header = CHATGPT_HOST if host == CHATGPT_HOST else api_host
 
 
 addons = [CompressorRoute()]

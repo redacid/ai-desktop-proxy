@@ -79,12 +79,14 @@ export interface CompressorStats {
 
 export interface ProxyInfo {
   port: number
+  codexPort: number
   mitmdump: string | null // path, or null when mitmproxy is not installed
   uv: string | null
   /** current = written by this app version; legacy = written by cdp.sh; outdated = settings or app changed */
   unit: 'missing' | 'legacy' | 'outdated' | 'current'
   active: boolean
   listening: boolean
+  codexListening: boolean
   /** Process listening on the port, when it can be identified. */
   owner: { pid: number; name: string } | null
   /** owner is our service's main process */
@@ -153,6 +155,8 @@ export interface HeadroomOptions {
 
 export interface UserSettings {
   proxyPort: number
+  /** Reverse listener for clients that only take a base URL (Codex). */
+  codexPort: number
   headroomUrl: string
   headroom: HeadroomOptions
   autoRepair: boolean

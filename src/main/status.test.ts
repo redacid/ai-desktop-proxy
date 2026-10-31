@@ -31,9 +31,10 @@ describe('clientsStatus', () => {
 })
 
 describe('proxyStatus', () => {
-  const info = { port: 8877, mitmdump: '/m', uv: '/uv', unit: 'current' as const, active: true, listening: true, caExists: true, owner: { pid: 7, name: 'mitmdump' }, ours: true }
+  const info = { port: 8877, codexPort: 8878, mitmdump: '/m', uv: '/uv', unit: 'current' as const, active: true, listening: true, codexListening: true, caExists: true, owner: { pid: 7, name: 'mitmdump' }, ours: true }
   it('is ok when our service serves', () => {
     expect(proxyStatus(info).health).toBe('ok')
+    expect(proxyStatus({ ...info, codexListening: false })).toMatchObject({ health: 'degraded' })
   })
   it('names a foreign process on the port', () => {
     expect(proxyStatus({ ...info, ours: false, owner: { pid: 42, name: 'mitmdump' } }).detail).toMatch(/held by mitmdump \(pid 42\)/)

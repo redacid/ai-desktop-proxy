@@ -3,7 +3,7 @@ import type { HeadroomOptions } from '@shared/ipc'
 import type { AppliedRecord } from './clients/types'
 import { DEFAULT_HEADROOM_OPTIONS, normalizeHeadroomOptions } from './compressors/headroom-options'
 import { writeJsonAtomic } from './fsutil'
-import { DEFAULT_CA_FILE, DEFAULT_PORT } from './proxy-env'
+import { DEFAULT_CA_FILE, DEFAULT_CODEX_PORT, DEFAULT_PORT } from './proxy-env'
 
 export interface ClientPrefs {
   enabled: boolean
@@ -12,6 +12,8 @@ export interface ClientPrefs {
 
 export interface Settings {
   proxyPort: number
+  /** mitmdump's reverse listener for Codex (upstream api.openai.com). */
+  codexPort: number
   caFile: string
   headroomUrl: string
   /** Flags for the headroom service we run. */
@@ -24,6 +26,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   proxyPort: DEFAULT_PORT,
+  codexPort: DEFAULT_CODEX_PORT,
   caFile: DEFAULT_CA_FILE,
   headroomUrl: 'http://127.0.0.1:6767',
   headroom: DEFAULT_HEADROOM_OPTIONS,

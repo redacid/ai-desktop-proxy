@@ -41,6 +41,9 @@ Unit tests sit next to the code (`*.test.ts`). They use temporary directories an
 touch your real `~/.claude`, systemd or network:
 
 - `ClaudeCodeAdapter`: symlinks, file mode, Unicode, `NO_PROXY` merge, conflicts, broken JSON, port moves.
+- `CodexAdapter`: byte-exact round trip with comments, old-port moves, foreign `openai_base_url` and `model_provider`,
+  broken TOML, hand-edited lines, symlinks.
+- `cdp_addon.py` `plan()`: Codex to headroom, fallback to api.openai.com or chatgpt.com, Claude routes unchanged.
 - `ClientManager`: enable refused without proxy, auto-restore, failsafe, suspend/resume.
 - `ProxyManager`/`HeadroomService` pieces: unit rendering and quoting, outdated/legacy detection, port owner.
 - `parseStatsHistory` against `examples/headroom-stats.json`; `parseFeed`/`detailFromFeed` and the renderer's
@@ -60,14 +63,16 @@ A container without a systemd user session can still drive the whole app:
 
 Kill leftover `mitmdump`/`headroom` processes between runs; a stale one on the port makes the next run fail.
 
-## Adding a client (Codex, Cursor, …)
+## Adding a client (Cursor, …)
 
 1. Implement `ClientAdapter` in `src/main/clients/<name>.ts`: `configPath`, `watchPaths()`, `inspect(env,
    record)`, `apply(env, previous)` returning an `AppliedRecord`, `remove(record, env)`. Follow the invariants in
    [architecture.md](architecture.md#invariants); reuse `fsutil.ts` for writes.
-2. Register it in `index.ts` (`new ClientManager([new ClaudeCodeAdapter(), new YourAdapter()], store)`). The UI
+   A client that honours `HTTPS_PROXY` and a CA file follows `claude-code.ts`; one that only takes a base URL
+   follows `codex.ts` and needs a listener in `mitmdumpArgs` plus a route in `cdp_addon.py`'s `plan()`.
+2. Register it in `index.ts` (`new ClientManager([new ClaudeCodeAdapter(), new CodexAdapter(), new YourAdapter()], store)`). The UI
    and tray list clients from status, so no UI change is needed.
-3. Add tests mirroring `claude-code.test.ts`.
+3. Add tests mirroring `claude-code.test.ts` or `codex.test.ts`.
 4. Document it in the user guide (clients table, files the app touches) and the README status.
 
 ## Adding a compressor

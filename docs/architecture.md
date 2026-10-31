@@ -8,6 +8,7 @@
 │   └─ window.api ── preload (contextBridge) ── IPC ──┐   │
 │ Main process (src/main)                             ▼   │
 │   ClientManager ── ClaudeCodeAdapter ── ~/.claude/settings.json
+│                 └─ CodexAdapter ────── ~/.codex/config.toml
 │   ProxyManager ─── systemctl --user ── claude-desktop-proxy.service ── mitmdump + cdp_addon.py
 │   HeadroomService ─ systemctl --user ── claude-desktop-proxy-headroom.service ── headroom proxy
 │   HeadroomBackend ─ HTTP /health, /stats-history, /transformations/feed
@@ -24,7 +25,8 @@ must never leave clients pointing at a dead proxy port, so the services outlive 
 ## Request path
 
 1. A client started with `HTTPS_PROXY=http://127.0.0.1:<port>` opens a `CONNECT` to mitmdump.
-2. mitmdump decrypts only `api.anthropic.com:443` (`--allow-hosts`); everything else is tunnelled untouched.
+2. mitmdump decrypts only `api.anthropic.com:443` and `api.openai.com:443` (`--allow-hosts`); everything else is
+   tunnelled untouched.
    The client trusts mitmproxy's CA through `NODE_EXTRA_CA_CERTS`; the system trust store is never changed.
 3. The addon (`resources/mitmproxy/cdp_addon.py`) rewrites the request target to headroom while headroom's
    `/health` answers (checked every 5 s in a background thread, ignoring proxy variables). Otherwise the request
@@ -35,6 +37,24 @@ must never leave clients pointing at a dead proxy port, so the services outlive 
 5. headroom runs with proxy variables unset (`UnsetEnvironment=` in its unit), so it reaches the API directly and
    cannot loop back through mitmdump.
 
+### Codex
+
+Codex (CLI and desktop app) sends requests from Rust and cannot be made to trust our CA through an environment in
+its config, but its built-in `openai` provider takes `openai_base_url` from `config.toml` for both API-key and
+ChatGPT logins. The same mitmdump therefore runs a second listener, `--mode reverse:https://api.openai.com@<codex
+port>` (default 8878), next to `--mode regular@<proxy port>`, and Codex's base URL is `http://127.0.0.1:<codex
+port>/v1`. Codex talks plain HTTP and WebSocket to it, so no certificate is involved.
+
+1. While headroom is healthy, the addon sends every request from the reverse listener to headroom with the path
+   unchanged (`/v1/responses`, `/v1/models`, WebSocket upgrades). headroom picks the upstream itself: chatgpt.com
+   for a ChatGPT login (a `ChatGPT-Account-Id` header), api.openai.com for an API key.
+2. While headroom is down, a request with `ChatGPT-Account-Id` goes to `https://chatgpt.com/backend-api/codex`
+   with `/v1` replaced by that prefix, which is where Codex would send it without a base URL; anything else goes
+   to the reverse mode's upstream, api.openai.com.
+3. `api.openai.com:443` is in `--allow-hosts` so the reverse listener's TLS to it is handled by mitmproxy. On the
+   regular listener a `CONNECT` to api.openai.com is therefore decrypted too, but the addon leaves those requests
+   alone: only the reverse listener's OpenAI traffic is routed.
+
 ## Main-process modules
 
 | Module | Responsibility |
@@ -42,6 +62,7 @@ must never leave clients pointing at a dead proxy port, so the services outlive 
 | `index.ts` | Wiring, IPC handlers, user actions (`runProxyAction`, `runCompressorAction`, `saveSettings`), dialogs. One service action at a time (`exclusive`) |
 | `clients/types.ts` | `ClientAdapter` interface, `AppliedRecord` (what we wrote into a config) |
 | `clients/claude-code.ts` | Claude Code adapter: `env` block of `~/.claude/settings.json` |
+| `clients/codex.ts` | Codex adapter: top-level `openai_base_url` in `$CODEX_HOME/config.toml` (default `~/.codex`), edited as text and checked with `smol-toml` |
 | `clients/manager.ts` | `ClientManager`: watches config dirs, periodic checks, auto-restore, failsafe, enable/disable, suspend/resume |
 | `proxy/manager.ts` | `ProxyManager`: find/install mitmdump, render the unit, set up/start/stop/remove, wait until serving |
 | `proxy/systemd.ts` | Unit rendering with systemd-safe quoting; `systemctl --user` / `journalctl --user` wrapper |
@@ -54,8 +75,8 @@ must never leave clients pointing at a dead proxy port, so the services outlive 
 | `store.ts` | `AppStore`: `state.json` with settings and per-client `{ enabled, applied }` |
 | `settings.ts` | Validation of user settings |
 | `autostart.ts` | XDG autostart entry |
-| `fsutil.ts` | Atomic JSON writes that keep symlinks, permissions and Unicode; one-time backups |
-| `proxy-env.ts` | The proxy environment for clients; TCP port probe |
+| `fsutil.ts` | Atomic JSON and text writes that keep symlinks, permissions and Unicode; one-time backups |
+| `proxy-env.ts` | The proxy environment for clients (proxy URL, CA, `NO_PROXY` hosts, Codex base URL); TCP port probe |
 | `tray.ts`, `window.ts`, `paths.ts` | Tray menu and icon (health colour; busy animation while a service action runs), window (close hides), resource paths in dev and packaged builds |
 
 `src/shared/ipc.ts` is the single contract between main and renderer: every channel and every type that crosses
@@ -80,7 +101,7 @@ The renderer turns messages into readable text in `src/renderer/src/messages.ts`
 
 ## Client state machine
 
-`ClaudeCodeAdapter.inspect` classifies the config as `applied`, `absent`, `partial`, `conflict`, `missing` or
+`ClaudeCodeAdapter.inspect` (and `CodexAdapter.inspect` likewise) classifies the config as `applied`, `absent`, `partial`, `conflict`, `missing` or
 `error`. Values equal to the last `AppliedRecord` (for example the previous port) count as ours, so a port change
 reads as `partial` and is repaired, not reported as a conflict.
 
@@ -97,12 +118,16 @@ and when the proxy's listening state flips:
 
 These protect the user's configs and running sessions; keep them when changing code.
 
-- Never overwrite a value we did not write. A foreign `HTTPS_PROXY` or `NODE_EXTRA_CA_CERTS` is a conflict.
+- Never overwrite a value we did not write. A foreign `HTTPS_PROXY` or `NODE_EXTRA_CA_CERTS` is a conflict, and so
+  is a foreign `openai_base_url` or a `model_provider` other than `openai` in Codex's config.
+- Codex's config is edited as text so comments survive: our key goes on the first line under a marker comment,
+  removal deletes exactly that line, and every result is parsed before it is written. A line of ours edited by
+  hand is reported, not guessed at.
 - Remove only what the `AppliedRecord` says we wrote; `NO_PROXY` is merged and un-merged host by host.
 - Never write a config we could not parse; never create a config on remove; never rewrite an unchanged file.
 - Writes are atomic, keep symlinks (dotfiles), file mode and Unicode, and leave no temp files.
 - Clients first on the way down (remove settings, then stop the proxy); proxy first on the way up.
-- Never enable a client while nothing listens on the proxy port.
+- Never enable a client while nothing listens on the proxy port or the Codex port (one mitmdump serves both).
 - Never start a service on a port another process holds; name the process and ask before stopping it.
 - Never touch a headroom the app did not start.
 - Install anything only after the user confirms a dialog that names the command.
@@ -114,6 +139,7 @@ These protect the user's configs and running sessions; keep them when changing c
 ```json
 {
   "proxyPort": 8877,
+  "codexPort": 8878,
   "caFile": "/home/me/.mitmproxy/mitmproxy-ca-cert.pem",
   "headroomUrl": "http://127.0.0.1:6767",
   "headroom": { "mode": "cache", "rpm": null, "logMessages": false, "extraArgs": "", "…": "see HeadroomOptions" },
@@ -123,6 +149,10 @@ These protect the user's configs and running sessions; keep them when changing c
     "claude-code": {
       "enabled": true,
       "applied": { "proxyUrl": "http://127.0.0.1:8877", "caFile": "…", "noProxyAdded": ["127.0.0.1", "localhost"] }
+    },
+    "codex": {
+      "enabled": true,
+      "applied": { "proxyUrl": "http://127.0.0.1:8878/v1", "caFile": "", "noProxyAdded": [] }
     }
   }
 }

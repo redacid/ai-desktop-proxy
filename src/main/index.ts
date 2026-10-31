@@ -9,6 +9,7 @@ import {
 } from '@shared/ipc'
 import { Autostart } from './autostart'
 import { ClaudeCodeAdapter } from './clients/claude-code'
+import { CodexAdapter } from './clients/codex'
 import { ClientManager } from './clients/manager'
 import { HeadroomBackend } from './compressors/headroom'
 import { HEADROOM_PACKAGE, HEADROOM_PYTHON, HeadroomService, localEndpoint } from './compressors/headroom-service'
@@ -34,7 +35,7 @@ let busy = false // one service action at a time
 let wasListening: boolean | null = null
 
 const store = new AppStore(join(app.getPath('userData'), 'state.json'))
-const clients = new ClientManager([new ClaudeCodeAdapter()], store)
+const clients = new ClientManager([new ClaudeCodeAdapter(), new CodexAdapter()], store)
 const headroom = (): HeadroomBackend => new HeadroomBackend(store.settings.headroomUrl)
 const headroomService = new HeadroomService(() => store.settings, () => headroom().answering())
 const proxy = new ProxyManager(() => store.settings, {
@@ -162,8 +163,8 @@ async function runProxyAction(action: ProxyAction): Promise<string | null> {
       const ok = await confirm(
         'Install mitmproxy and start the proxy?',
         'Runs "uv tool install mitmproxy", then creates and starts the systemd user service ' +
-          `claude-desktop-proxy.service on 127.0.0.1:${store.settings.proxyPort}. ` +
-          'Only api.anthropic.com is decrypted; the mitmproxy CA is trusted only by clients you turn on here.',
+          `claude-desktop-proxy.service on 127.0.0.1:${store.settings.proxyPort} (and :${store.settings.codexPort} for Codex). ` +
+          'Only api.anthropic.com and api.openai.com are decrypted; the mitmproxy CA is trusted only by clients you turn on here.',
         'Install'
       )
       if (!ok) return ''
@@ -268,8 +269,8 @@ const compressorAction = (action: CompressorAction): Promise<ActionResult> =>
   )
 
 async function getSettings(): Promise<UserSettings> {
-  const { proxyPort, headroomUrl, headroom, autoRepair, checkIntervalSec } = store.settings
-  return { proxyPort, headroomUrl, headroom, autoRepair, checkIntervalSec, autostart: await autostart.isEnabled() }
+  const { proxyPort, codexPort, headroomUrl, headroom, autoRepair, checkIntervalSec } = store.settings
+  return { proxyPort, codexPort, headroomUrl, headroom, autoRepair, checkIntervalSec, autostart: await autostart.isEnabled() }
 }
 
 /**
@@ -286,6 +287,7 @@ const saveSettings = (input: UserSettings): Promise<ActionResult> =>
     const [proxyInfo, headroomInfo] = await Promise.all([proxy.info(), headroomService.info()])
     await store.update({
       proxyPort: next.proxyPort,
+      codexPort: next.codexPort,
       headroomUrl: next.headroomUrl,
       headroom: next.headroom,
       autoRepair: next.autoRepair,
@@ -304,7 +306,8 @@ const saveSettings = (input: UserSettings): Promise<ActionResult> =>
         await headroomService.stop() // the URL now points elsewhere; our service is not used
       }
     }
-    if ((urlChanged || before.proxyPort !== next.proxyPort) && proxyInfo.unit !== 'missing') {
+    const portsChanged = before.proxyPort !== next.proxyPort || before.codexPort !== next.codexPort
+    if ((urlChanged || portsChanged) && proxyInfo.unit !== 'missing') {
       const err = await withPortCheck(async () => (await proxy.setup(), null))
       if (err) return `settings saved, but the proxy did not restart: ${err}`
     }

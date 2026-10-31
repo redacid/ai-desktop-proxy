@@ -39,13 +39,17 @@ export class ClientManager extends EventEmitter {
   }
 
   private env(): ProxyEnv {
-    return buildProxyEnv(this.store.settings.proxyPort, this.store.settings.caFile)
+    const { proxyPort, caFile, codexPort } = this.store.settings
+    return buildProxyEnv(proxyPort, caFile, codexPort)
   }
 
   /** Why turning a client on now would break it, or null when it is safe. */
   async proxyProblem(): Promise<string | null> {
-    const { proxyPort, caFile } = this.store.settings
-    if (!(await this.proxyUp(proxyPort))) return `proxy is not listening on 127.0.0.1:${proxyPort}`
+    const { proxyPort, codexPort, caFile } = this.store.settings
+    // One mitmdump serves both listeners, so either one missing means it is not ours or not ready.
+    for (const port of [proxyPort, codexPort]) {
+      if (!(await this.proxyUp(port))) return `proxy is not listening on 127.0.0.1:${port}`
+    }
     if (!(await this.caExists(caFile))) return `proxy CA certificate not found at ${caFile}`
     return null
   }
