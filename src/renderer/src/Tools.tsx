@@ -1,5 +1,34 @@
 import { useEffect, useState } from 'react'
-import type { ToolAction, ToolId, ToolInfo } from '@shared/ipc'
+import type { ToolAction, ToolId, ToolInfo, ToolStats } from '@shared/ipc'
+
+const int = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 })
+
+function Stats({ stats }: { stats: ToolStats }): React.JSX.Element {
+  const max = Math.max(1, ...stats.daily.map((d) => d.value))
+  return (
+    <div className="tool-stats">
+      <div className="tiles">
+        {stats.facts.map((f) => (
+          <div key={f.label}>
+            <span className="value">{f.value}</span>
+            <span className="label">{f.label}</span>
+          </div>
+        ))}
+      </div>
+      {stats.daily.length > 0 && (
+        <div className="bars" aria-label="Tokens saved per day">
+          {stats.daily.map((d) => (
+            <div key={d.day} className="bar" title={`${d.day}: ${int.format(d.value)} tokens`}>
+              <span style={{ height: `${(d.value / max) * 100}%` }} />
+              <small>{d.day.slice(8)}</small>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="detail">Source: {stats.source}</p>
+    </div>
+  )
+}
 
 export function Tools({ disabled, onBusy, onLogStart }: {
   disabled: boolean
@@ -59,6 +88,7 @@ export function Tools({ disabled, onBusy, onLogStart }: {
               </span>
             </div>
             <p className="detail">{tool.detail}</p>
+            {tool.stats && <Stats stats={tool.stats} />}
             {tool.latest && <p className="detail">Latest: {tool.latest}{tool.updateAvailable ? ' · update available' : ''}</p>}
             {tool.blocked && <p className="note">{tool.blocked}</p>}
             {tool.error && <p className="error-inline">{tool.error}</p>}

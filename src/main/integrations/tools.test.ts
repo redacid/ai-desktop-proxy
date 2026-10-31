@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CompressorInfo } from '@shared/ipc'
-import { approveToolAction, binaryVersion, extractRtk, newerVersion, officialPonytailSource, ponytailInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
+import { approveToolAction, binaryVersion, extractRtk, newerVersion, officialPonytailSource, parsePonytailGain, parseRtkGain, ponytailInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
 
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))) })
@@ -311,5 +311,37 @@ describe('approved actions', () => {
     await expect(f.manager.plan('rtk', 'evil' as 'install')).rejects.toThrow(/Unknown/)
     expect(f.runner).not.toHaveBeenCalled()
     expect(f.stream).not.toHaveBeenCalled()
+  })
+})
+
+describe('tool stats', () => {
+  it('reads rtk gain JSON and keeps the last 14 days', () => {
+    const daily = Array.from({ length: 20 }, (_, i) => ({ date: `2026-10-${String(i + 1).padStart(2, '0')}`, saved_tokens: i }))
+    const stats = parseRtkGain({ summary: { total_commands: 800, total_saved: 85630, avg_savings_pct: 27.02 }, daily })!
+    expect(stats.facts).toEqual([
+      { label: 'tokens saved', value: '85,630' },
+      { label: 'average saving', value: '27%' },
+      { label: 'commands filtered', value: '800' }
+    ])
+    expect(stats.daily).toHaveLength(14)
+    expect(stats.daily.at(-1)).toEqual({ day: '2026-10-20', value: 19 })
+    expect(parseRtkGain([])).toBeNull()
+  })
+
+  it('reads the benchmark scoreboard from the ponytail-gain skill', () => {
+    const md = [
+      '```',
+      '  ponytail gain           benchmark · 39 tasks × 5 runs · Opus 5.5',
+      '',
+      '  no-skill        ████████████████████  100%',
+      '  Lines of code   █████████···········   47%   ▼ 53%',
+      '  Output tokens   ███████████·········   55%   ▼ 45%',
+      '  Hidden checks passed   97%  (no-skill 96%)',
+      '```'
+    ].join('\n')
+    const stats = parsePonytailGain(md)!
+    expect(stats.facts).toEqual([{ label: 'less lines of code', value: '53%' }, { label: 'less output tokens', value: '45%' }])
+    expect(stats.source).toMatch(/benchmark · 39 tasks.*nothing locally/)
+    expect(parsePonytailGain('no scoreboard')).toBeNull()
   })
 })

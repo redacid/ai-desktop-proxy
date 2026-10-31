@@ -161,3 +161,6 @@ code { font: 12px ui-monospace, monospace; }
 .tools > .detail { margin: 8px 0 14px; }
 .tool { min-width: 0; border: 1px solid var(--border, #333); border-radius: 8px; padding: 14px; }
 .tool .detail, .tool .note, .tool .error-inline { overflow-wrap: anywhere; white-space: pre-line; }
+.tool .tiles { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); margin: 8px 0; }
+.tool .tiles .value { font-size: 18px; }
+.tool .bars { height: 60px; }

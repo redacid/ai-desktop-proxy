@@ -122,6 +122,15 @@ appear in the Install log. Missing optional tools do not turn the proxy's health
   is reported as disabled; enable it in the client. Ponytail modes remain controlled by `/ponytail` in the
   client; the app does not rewrite project `AGENTS.md` with Ponytail instructions.
 
+Each card also shows what the tool achieved, refreshed with the presence check:
+
+- **RTK:** tokens saved, average saving and commands filtered, plus tokens saved per day for the last 14 days,
+  from `rtk gain --daily --format json`. These are RTK's own local records on this machine.
+- **Ponytail · Claude Code:** the figures from the installed plugin's `ponytail-gain` skill (less lines of code,
+  output tokens, cost, time). They are Ponytail's published benchmark, not measurements of your sessions:
+  Ponytail records nothing locally. The Codex card shows none, because the figures are read from Claude Code's
+  plugin cache.
+
 Version sources are PyPI (`headroom-ai`), GitHub Releases (`rtk-ai/rtk`), and the official Ponytail plugin
 manifest. GitHub rate limits, an offline machine, or unsupported client CLI output can prevent a check;
 the error is shown without attempting an installation. After a partial native-command failure, review

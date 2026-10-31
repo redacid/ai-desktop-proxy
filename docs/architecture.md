@@ -80,7 +80,7 @@ port>/v1`. Codex talks plain HTTP and WebSocket to it, so no certificate is invo
 | `compressors/headroom.ts` | `HeadroomBackend`: `/health`, `/stats-history` and `/transformations/feed` parsing (recent requests and their bodies) |
 | `compressors/headroom-service.ts` | `HeadroomService`: install/run headroom as a user service, external detection |
 | `compressors/headroom-options.ts` | headroom options: defaults, validation, mapping to `headroom proxy` flags and service environment, argument splitting |
-| `integrations/tools.ts` | Independent tool detection, durable update-check cadence, reviewable action plans, native plugin/RTK setup and verified RTK downloads |
+| `integrations/tools.ts` | Independent tool detection, durable update-check cadence, reviewable action plans, native plugin/RTK setup and verified RTK downloads; tool stats (`rtk gain` JSON, Ponytail's `ponytail-gain` scoreboard) |
 | `status.ts` | `StatusMonitor` (polling, combined health) and the status-line functions for each card |
 | `store.ts` | `AppStore`: `state.json` with settings and per-client `{ enabled, applied }` |
 | `settings.ts` | Validation of user settings |

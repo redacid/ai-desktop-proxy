@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
-import type { CompressorInfo, ToolAction, ToolId, ToolInfo } from '@shared/ipc'
+import type { CompressorInfo, ToolAction, ToolId, ToolInfo, ToolStats } from '@shared/ipc'
 import { run, runStreaming, type Runner } from '../proxy/exec'
 import { which } from '../proxy/tools'
 import { writeJsonAtomic } from '../fsutil'
@@ -51,6 +51,34 @@ export function officialPonytailSource(entry: unknown): boolean {
     typeof v === 'string' && /^(?:DietrichGebert\/ponytail|https:\/\/github\.com\/DietrichGebert\/ponytail(?:\.git)?\/?|git@github\.com:DietrichGebert\/ponytail(?:\.git)?)$/i.test(v))
 }
 
+const int = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+const num = (v: unknown): number => typeof v === 'number' && Number.isFinite(v) ? v : 0
+
+/** `rtk gain --daily --format json`: local savings recorded by RTK's hooks. */
+export function parseRtkGain(raw: unknown): ToolStats | null {
+  const s = object(object(raw).summary)
+  if (s.total_commands === undefined) return null
+  const daily = (Array.isArray(object(raw).daily) ? object(raw).daily as unknown[] : []).map(object)
+    .filter((d) => typeof d.date === 'string').map((d) => ({ day: d.date as string, value: num(d.saved_tokens) }))
+  return {
+    source: 'rtk gain, this machine',
+    facts: [
+      { label: 'tokens saved', value: int.format(num(s.total_saved)) },
+      { label: 'average saving', value: `${num(s.avg_savings_pct).toFixed(0)}%` },
+      { label: 'commands filtered', value: int.format(num(s.total_commands)) }
+    ],
+    daily: daily.slice(-14)
+  }
+}
+
+/** The scoreboard in Ponytail's own ponytail-gain skill: published benchmark figures, not local ones. */
+export function parsePonytailGain(markdown: string): ToolStats | null {
+  const facts = [...markdown.matchAll(/^\s+(\S.*?\S)\s{2,}[█·]+\s+\d+%\s+▼\s*(\d+%)\s*$/gm)]
+    .map((m) => ({ label: `less ${m[1].toLowerCase()}`, value: m[2] }))
+  const bench = /^\s+ponytail gain\s+(.+?)\s*$/m.exec(markdown)?.[1]
+  return facts.length ? { source: `published benchmark${bench ? ` (${bench})` : ''}; Ponytail records nothing locally`, facts, daily: [] } : null
+}
+
 export interface Command { cmd: string; args: string[] }
 export interface ToolPlan {
   id: ToolId
@@ -90,7 +118,7 @@ export class ToolManager extends EventEmitter {
   private readonly cacheFile: string
   private updates: UpdateCache = { headroom: emptyUpdate(), rtk: emptyUpdate(), ponytail: emptyUpdate() }
   private tools: ToolInfo[] = IDS.map((id) => ({ id, name: NAMES[id], installed: null, version: null, latest: null,
-    updateAvailable: false, checkedAt: null, error: null, blocked: 'Checking installation…', detail: 'Not checked yet.' }))
+    updateAvailable: false, checkedAt: null, error: null, blocked: 'Checking installation…', detail: 'Not checked yet.', stats: null }))
   private timer: NodeJS.Timeout | null = null
   private pending: Promise<ToolInfo[]> | null = null
   private mutation = false
@@ -176,7 +204,7 @@ export class ToolManager extends EventEmitter {
       const key = id.startsWith('ponytail') ? 'ponytail' : id as 'rtk' | 'headroom'
       const update = this.updates[key]
       const info: ToolInfo = { id, name: NAMES[id], installed: null, version: null, latest: update.latest,
-        updateAvailable: false, checkedAt: update.checkedAt, error: update.error, blocked: null, detail: '' }
+        updateAvailable: false, checkedAt: update.checkedAt, error: update.error, blocked: null, detail: '', stats: null }
       try {
         if (id === 'headroom') {
           const service = await this.deps.headroomInfo()
@@ -189,6 +217,7 @@ export class ToolManager extends EventEmitter {
           const binary = await this.rtkBinary()
           info.installed = !!binary
           if (binary) info.version = await this.readVersion(binary)
+          if (binary) info.stats = await this.rtkStats(binary)
           if (!['x64', 'arm64'].includes(this.deps.arch ?? process.arch)) info.blocked = 'RTK binary installation supports Linux x64 and arm64.'
           info.detail = binary === this.binary ? 'App-managed binary. Connect it to each client below.'
             : binary ? `Found at ${binary}. Updates install a separate app-managed copy.` : 'Reduces command output before the agent reads it.'
@@ -202,6 +231,7 @@ export class ToolManager extends EventEmitter {
             const plugin = ponytailInfo(JSON.parse(r.stdout), codex)
             info.installed = plugin.installed
             info.version = plugin.version
+            if (plugin.installed && !codex) info.stats = await this.ponytailStats(plugin.version)
             info.detail = plugin.installed ? `${plugin.enabled ? 'Enabled' : 'Installed but disabled'}. Restart the client after changes.`
               : 'Install the official Ponytail plugin for this client.'
           }
@@ -219,6 +249,18 @@ export class ToolManager extends EventEmitter {
     const version = r.code === 0 ? binaryVersion(r.stdout) : null
     if (!version) throw new Error(`Cannot determine version of ${binary}: ${r.stderr || r.stdout}`)
     return version
+  }
+
+  /** Stats are extra information: a failure leaves them out instead of failing detection. */
+  private async rtkStats(binary: string): Promise<ToolStats | null> {
+    const r = await this.runner(binary, ['gain', '--daily', '--format', 'json'])
+    try { return r.code === 0 ? parseRtkGain(JSON.parse(r.stdout)) : null } catch { return null }
+  }
+
+  private async ponytailStats(version: string | null): Promise<ToolStats | null> {
+    if (!version) return null
+    const skill = join(this.deps.home, '.claude', 'plugins', 'cache', 'ponytail', 'ponytail', version, 'skills', 'ponytail-gain', 'SKILL.md')
+    try { return parsePonytailGain(await fs.readFile(skill, 'utf8')) } catch { return null }
   }
 
   private async rtkBinary(): Promise<string | null> {

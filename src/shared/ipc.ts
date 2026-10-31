@@ -121,6 +121,16 @@ export interface ToolInfo {
   error: string | null
   blocked: string | null
   detail: string
+  /** What the tool reports it achieved; null when it reports nothing readable. */
+  stats: ToolStats | null
+}
+
+export interface ToolStats {
+  /** Where the figures come from, e.g. "rtk gain (this machine)" or "published benchmark". */
+  source: string
+  facts: { label: string; value: string }[]
+  /** Tokens saved per day, oldest first (RTK only). */
+  daily: { day: string; value: number }[]
 }
 
 export interface ToolActionResult {
