@@ -28,7 +28,7 @@ async function fixture() {
     rtkVersion: '0.49.0', headroomVersion: '0.40.0', ponyVersion: '5.3.0',
     ponyInstalled: true, codexInstalled: false, marketplace: true, foreignMarketplace: false,
     active: true, managed: 'ours' as CompressorInfo['managed'], local: true,
-    streamCode: 0, failVerification: false
+    streamCode: 0, failVerification: false, rtkClaude: true
   }
   const service = vi.fn(async (): Promise<CompressorInfo> => ({
     binary: state.missingHeadroom ? null : '/fake/headroom', uv: '/fake/uv', unit: 'current', active: state.active,
@@ -40,6 +40,9 @@ async function fixture() {
       const v = cmd.includes('headroom') ? state.headroomVersion : managed || (cmd.endsWith('.staging') && !state.failVerification) ? '0.50.0' : state.rtkVersion
       return { code: 0, stdout: `${cmd.includes('headroom') ? 'headroom, version' : 'rtk'} ${v}\n`, stderr: '' }
     }
+    if (args[0] === 'init' && args.includes('--show')) {
+      return { code: 0, stdout: args.includes('--codex') ? '[--] Global hook: not found\n' : `[${state.rtkClaude ? 'ok' : '--'}] Hook: rtk hook claude\n`, stderr: '' }
+    }
     if (args[0] === 'init') return { code: 0, stdout: '[dry-run] would patch hooks.json; nothing written', stderr: '' }
     if (args[1] === 'marketplace') return { code: 0, stdout: JSON.stringify(state.marketplace ? [{ name: 'ponytail', repo: state.foreignMarketplace ? 'attacker/ponytail' : 'DietrichGebert/ponytail' }] : []), stderr: '' }
     if (state.failDetection) return { code: 1, stdout: '', stderr: 'plugin API unavailable' }
@@ -47,8 +50,10 @@ async function fixture() {
       ? { installed: state.codexInstalled ? [{ pluginId: 'ponytail@ponytail', version: state.ponyVersion, enabled: true }] : [] }
       : state.ponyInstalled ? [{ id: 'ponytail@ponytail', version: state.ponyVersion, enabled: true, scope: 'user' }] : []), stderr: '' }
   })
-  const stream = vi.fn(async (cmd: string, _args: string[], _log: (line: string) => void) => {
+  const stream = vi.fn(async (cmd: string, args: string[], _log: (line: string) => void) => {
     if (state.streamCode) return state.streamCode
+    if (args.includes('--uninstall')) { state.rtkClaude = false; return 0 }
+    if (args[1] === 'uninstall' || args[1] === 'remove') { state.ponyInstalled = state.codexInstalled = false; return 0 }
     if (cmd.endsWith('uv')) { state.headroomVersion = '0.41.0'; state.missingHeadroom = false }
     if (cmd.endsWith('claude')) { state.ponyInstalled = true; state.ponyVersion = '5.4.0' }
     if (cmd.endsWith('codex')) { state.codexInstalled = true; state.ponyVersion = '5.4.0' }
@@ -224,6 +229,27 @@ describe('approved actions', () => {
     f.state.streamCode = 1
     await expect(approveToolAction(f.manager, 'headroom', 'update', async () => true, () => {})).rejects.toThrow(/exited with 1/)
     expect(f.setup).not.toHaveBeenCalled()
+  })
+
+  it('reads RTK connections and disconnects only after a preview', async () => {
+    const f = await fixture()
+    const rtk = (await f.manager.refresh(true)).find((t) => t.id === 'rtk')!
+    expect(rtk.connected).toEqual({ claude: true, codex: false })
+    const plan = await f.manager.plan('rtk', 'disconnect-claude')
+    expect(plan.commands).toEqual([{ cmd: '/fake/rtk', args: ['init', '-g', '--uninstall'] }])
+    expect(f.runner).toHaveBeenCalledWith('/fake/rtk', ['init', '-g', '--uninstall', '--dry-run'])
+    expect(f.stream).not.toHaveBeenCalled()
+    await f.manager.execute(plan, () => {})
+    expect(f.manager.current.find((t) => t.id === 'rtk')!.connected?.claude).toBe(false)
+  })
+
+  it('removes Ponytail with the client command and verifies it is gone', async () => {
+    const f = await fixture()
+    const plan = await f.manager.plan('ponytail-claude', 'remove')
+    expect(plan.commands).toEqual([{ cmd: '/fake/claude', args: ['plugin', 'uninstall', 'ponytail@ponytail', '--scope', 'user'] }])
+    await f.manager.execute(plan, () => {})
+    expect(f.manager.current.find((t) => t.id === 'ponytail-claude')!.installed).toBe(false)
+    await expect(f.manager.plan('ponytail-claude', 'remove')).rejects.toThrow(/not installed/)
   })
 
   it('previews RTK hook changes before approval and keeps custom filters untrusted', async () => {

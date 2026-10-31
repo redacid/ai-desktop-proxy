@@ -285,7 +285,7 @@ export class ToolManager extends EventEmitter {
 
   /** Build reviewable commands before the confirmation dialog; this never installs anything. */
   async plan(id: ToolId, action: ToolAction): Promise<ToolPlan> {
-    if (!IDS.includes(id) || !['install', 'update', 'connect-claude', 'connect-codex'].includes(action)) throw new Error('Unknown tool action')
+    if (!IDS.includes(id) || !['install', 'update', 'connect-claude', 'connect-codex', 'disconnect-claude', 'disconnect-codex', 'remove'].includes(action)) throw new Error('Unknown tool action')
     await this.refresh()
     const info = this.tools.find((e) => e.id === id)!
     if (info.blocked) throw new Error(info.blocked)
@@ -293,7 +293,25 @@ export class ToolManager extends EventEmitter {
     if (action === 'update' && !info.updateAvailable) throw new Error('No newer stable version is available')
     const commands: Command[] = []
     const plan: ToolPlan = { id, action, commands, version: info.latest, detail: '' }
-    if (action.startsWith('connect-')) {
+    if (action.startsWith('disconnect-')) {
+      if (id !== 'rtk') throw new Error('Only RTK supports this connection action')
+      const binary = await this.rtkBinary()
+      if (!binary) throw new Error('RTK is not installed')
+      const codex = action === 'disconnect-codex'
+      const args = ['init', '-g', ...(codex ? ['--codex'] : []), '--uninstall']
+      const preview = await this.runner(binary, [...args, '--dry-run'])
+      if (preview.code !== 0) throw new Error(preview.stderr || preview.stdout)
+      commands.push({ cmd: binary, args })
+      plan.detail = `Removes RTK's global hooks and instructions from ${codex ? 'Codex' : 'Claude Code'}. RTK stays installed and can be connected again. Restart the client afterward.\n\n${preview.stdout}\n${preview.stderr}`
+    } else if (action === 'remove') {
+      if (!id.startsWith('ponytail')) throw new Error('Only Ponytail can be removed here')
+      if (info.installed !== true) throw new Error('Ponytail is not installed for this client')
+      const codex = id === 'ponytail-codex'
+      const cli = await this.find(codex ? 'codex' : 'claude')
+      if (!cli) throw new Error('Client CLI not found')
+      commands.push({ cmd: cli, args: codex ? ['plugin', 'remove', PONYTAIL] : ['plugin', 'uninstall', PONYTAIL, '--scope', 'user'] })
+      plan.detail = `Uninstalls the Ponytail plugin from ${codex ? 'Codex' : 'Claude Code'} with the client's own command. Install brings it back. Restart the client afterward.`
+    } else if (action.startsWith('connect-')) {
       if (id !== 'rtk') throw new Error('Only RTK supports this connection action')
       const binary = await this.rtkBinary()
       if (!binary) throw new Error('Install RTK first')
@@ -357,7 +375,7 @@ export class ToolManager extends EventEmitter {
         const service = await this.deps.headroomInfo()
         if (!service.local || service.managed === 'external') throw new Error('headroom is now managed outside this app; nothing changed')
       }
-      if (plan.id === 'rtk' && !plan.action.startsWith('connect-')) await this.installRtk(plan.version!, log)
+      if (plan.id === 'rtk' && (plan.action === 'install' || plan.action === 'update')) await this.installRtk(plan.version!, log)
       for (const command of plan.commands) {
         log(`$ ${formatCommand(command)}`)
         const code = await this.stream(command.cmd, command.args, log)
@@ -371,7 +389,10 @@ export class ToolManager extends EventEmitter {
       }
     } finally { this.mutation = false; await this.refresh() }
     const info = this.tools.find((e) => e.id === plan.id)!
-    if (!plan.action.startsWith('connect-') && (info.installed !== true || !info.version || (plan.version && newerVersion(plan.version, info.version)))) {
+    const client = plan.action.endsWith('-codex') ? 'codex' : 'claude'
+    if (plan.action === 'remove' && info.installed !== false) throw new Error(`Command completed, but ${info.name} is still listed as installed. ${info.error ?? 'Check the client plugin manager.'}`)
+    if (plan.action.startsWith('disconnect-') && info.connected?.[client] !== false) throw new Error(`Command completed, but rtk init --show does not confirm RTK was removed from ${client === 'codex' ? 'Codex' : 'Claude Code'}.`)
+    if ((plan.action === 'install' || plan.action === 'update') && (info.installed !== true || !info.version || (plan.version && newerVersion(plan.version, info.version)))) {
       throw new Error(`Command completed, but ${info.name} ${plan.version ?? ''} could not be verified. ${info.error ?? 'Check the client plugin manager.'}`)
     }
     log('Done. Restart client sessions to apply hook or plugin changes.')

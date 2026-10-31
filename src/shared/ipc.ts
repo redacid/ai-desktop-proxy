@@ -108,7 +108,7 @@ export interface CompressorInfo {
 export type CompressorAction = 'install' | 'setup' | 'start' | 'stop' | 'restart' | 'remove'
 
 export type ToolId = 'headroom' | 'rtk' | 'ponytail-claude' | 'ponytail-codex'
-export type ToolAction = 'install' | 'update' | 'connect-claude' | 'connect-codex'
+export type ToolAction = 'install' | 'update' | 'connect-claude' | 'connect-codex' | 'disconnect-claude' | 'disconnect-codex' | 'remove'
 
 export interface ToolInfo {
   id: ToolId

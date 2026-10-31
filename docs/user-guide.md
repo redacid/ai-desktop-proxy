@@ -112,9 +112,11 @@ appear in the Install log. Missing optional tools do not turn the proxy's health
   is needed. Coding clients must have `~/.local/bin` on PATH before other RTK installations; restart clients
   after installation. **Connect to Claude Code / Codex** previews the native `rtk init` changes, then asks
   before registering global hooks and instructions. Custom project filters are not automatically trusted.
-  Reconnection is explicit; stopping the API proxy does not remove RTK hooks. The card asks
-  `rtk init -g --show` (and `--codex --show`) whether RTK's global hooks are in place: a connected client shows
-  **connected to …** instead of the button; a partial setup keeps the button so it can be repaired.
+  Reconnection is explicit; stopping the API proxy does not remove RTK hooks. The card lists Claude Code and
+  Codex with a switch each, like the Clients card. Their state comes from `rtk init -g --show` (and
+  `--codex --show`): **connected** only when every global item is in place, so a partial setup reads as not
+  connected and switching on repairs it. Switching off previews and runs `rtk init -g [--codex] --uninstall`,
+  which removes RTK's hooks, `RTK.md` and the `@RTK.md` reference; RTK itself stays installed.
 - **Ponytail:** requires the corresponding client CLI with plugin support. Uses the official
   `DietrichGebert/ponytail` marketplace and the client's native install/update commands. Only the Ponytail
   marketplace is refreshed, not every marketplace or plugin. A different marketplace already named
@@ -122,7 +124,9 @@ appear in the Install log. Missing optional tools do not turn the proxy's health
   installation directly in the client. Restart client sessions after changes. In Codex, review and trust
   Ponytail hooks through `/hooks`; this app does not approve hook trust. An installed but disabled plugin
   is reported as disabled; enable it in the client. Ponytail modes remain controlled by `/ponytail` in the
-  client; the app does not rewrite project `AGENTS.md` with Ponytail instructions.
+  client; the app does not rewrite project `AGENTS.md` with Ponytail instructions. Ponytail has one card with a
+  switch per client: on installs it, off uninstalls it with the client's own command
+  (`claude plugin uninstall ponytail@ponytail --scope user`, `codex plugin remove ponytail@ponytail`).
 
 Each card also shows what the tool achieved, refreshed with the presence check:
 
