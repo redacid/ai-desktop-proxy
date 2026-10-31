@@ -1,0 +1,14 @@
+appId: ua.redacid.claude-desktop-proxy
+productName: Claude Desktop Proxy
+directories:
+  output: dist
+files:
+  - out/**
+extraResources:
+  - from: resources
+    to: resources
+linux:
+  target: [AppImage, deb]
+  category: Development
+  icon: resources/icon.png
+  maintainer: Serhii <sr@ios.in.ua>
