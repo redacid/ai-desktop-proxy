@@ -66,12 +66,18 @@ export class HeadroomBackend {
   async health(): Promise<ComponentStatus> {
     try {
       const res = await fetch(`${this.baseUrl}/health`, { signal: AbortSignal.timeout(3000) })
-      return res.ok
-        ? { health: 'ok', detail: `answering at ${this.baseUrl}` }
-        : { health: 'degraded', detail: `${this.baseUrl}/health returned HTTP ${res.status}` }
+      if (!res.ok) return { health: 'degraded', detail: `${this.baseUrl}/health returned HTTP ${res.status}` }
+      const body = obj(await res.json().catch(() => null))
+      const version = str(body, 'version')
+      return { health: 'ok', detail: `answering at ${this.baseUrl}${version ? ` (v${version})` : ''}` }
     } catch {
       return { health: 'down', detail: `not answering at ${this.baseUrl}` }
     }
+  }
+
+  /** True when /health answers at all; used to wait for a starting service. */
+  async answering(): Promise<boolean> {
+    return (await this.health()).health !== 'down'
   }
 
   async stats(): Promise<CompressorStats> {

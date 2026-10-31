@@ -60,6 +60,27 @@ export interface ProxyInfo {
   caExists: boolean
 }
 
+export interface CompressorInfo {
+  binary: string | null // headroom command, or null when not installed
+  uv: string | null
+  unit: 'missing' | 'outdated' | 'current'
+  active: boolean // our service runs
+  answering: boolean // the configured URL answers /health
+  /** ours = our service serves it; external = something else (e.g. Headroom Desktop); none = nothing */
+  managed: 'ours' | 'external' | 'none'
+  local: boolean // URL is on this machine, so it can be run here
+}
+
+export type CompressorAction = 'install' | 'setup' | 'start' | 'stop' | 'restart' | 'remove'
+
+export interface UserSettings {
+  proxyPort: number
+  headroomUrl: string
+  autoRepair: boolean
+  checkIntervalSec: number
+  autostart: boolean
+}
+
 export type ProxyAction = 'install' | 'setup' | 'start' | 'stop' | 'restart' | 'remove'
 
 export interface AppStatus {
@@ -67,6 +88,7 @@ export interface AppStatus {
   proxy: ComponentStatus
   proxyInfo: ProxyInfo | null
   compressor: ComponentStatus
+  compressorInfo: CompressorInfo | null
   clients: ComponentStatus
   clientList: ClientInfo[]
   stats: CompressorStats | null
@@ -87,7 +109,11 @@ export const IPC = {
   setClientEnabled: 'client:set-enabled',
   proxyAction: 'proxy:action',
   proxyLogs: 'proxy:logs',
-  installLog: 'proxy:install-log'
+  installLog: 'proxy:install-log',
+  compressorAction: 'compressor:action',
+  compressorLogs: 'compressor:logs',
+  getSettings: 'settings:get',
+  saveSettings: 'settings:save'
 } as const
 
 export interface Api {
@@ -96,6 +122,10 @@ export interface Api {
   setClientEnabled(id: string, enabled: boolean): Promise<ActionResult>
   proxyAction(action: ProxyAction): Promise<ActionResult>
   proxyLogs(): Promise<string>
+  compressorAction(action: CompressorAction): Promise<ActionResult>
+  compressorLogs(): Promise<string>
+  getSettings(): Promise<UserSettings>
+  saveSettings(settings: UserSettings): Promise<ActionResult>
   onStatus(listener: (status: AppStatus) => void): () => void
   onInstallLog(listener: (line: string) => void): () => void
 }

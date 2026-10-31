@@ -1,12 +1,14 @@
 import { promises as fs } from 'node:fs'
-import { homedir } from 'node:os'
-import { delimiter, dirname, join } from 'node:path'
+import { dirname } from 'node:path'
 import type { ProxyInfo } from '@shared/ipc'
 import { exists } from '../fsutil'
 import { isPortListening } from '../proxy-env'
 import type { Settings } from '../store'
 import { run as defaultRun, runStreaming, type Runner } from './exec'
 import { renderUnit, SystemdUser } from './systemd'
+import { findUv, findUvTool, portOwner, PortTakenError, userUnitFile, type PortOwner } from './tools'
+
+export { parseSsOwner, PortTakenError } from './tools'
 
 export const UNIT = 'claude-desktop-proxy.service' // same name as legacy/cdp.sh, so setup migrates it
 export const API_HOSTS_REGEX = '^api[.]anthropic[.]com:443$'
@@ -18,8 +20,7 @@ export interface ProxyPaths {
 }
 
 export function defaultUnitFile(): string {
-  const base = process.env.XDG_CONFIG_HOME || join(homedir(), '.config')
-  return join(base, 'systemd', 'user', UNIT)
+  return userUnitFile(UNIT)
 }
 
 /** mitmdump arguments; everything not about routing stays at mitmproxy defaults. */
@@ -40,28 +41,6 @@ export function mitmdumpArgs(s: Pick<Settings, 'proxyPort' | 'headroomUrl'>, add
   ]
 }
 
-async function which(name: string, extraDirs: string[] = []): Promise<string | null> {
-  const dirs = [...(process.env.PATH ?? '').split(delimiter), ...extraDirs].filter(Boolean)
-  for (const dir of dirs) {
-    const candidate = join(dir, name)
-    try {
-      await fs.access(candidate, fs.constants.X_OK)
-      return candidate
-    } catch {
-      // keep looking
-    }
-  }
-  return null
-}
-
-/** Parses `ss -Hltnp` output: the first process listening, e.g. users:(("mitmdump",pid=42,fd=7)). */
-export function parseSsOwner(output: string): { pid: number; name: string } | null {
-  const m = /users:\(\("([^"]+)",pid=(\d+)/.exec(output)
-  return m ? { name: m[1], pid: Number(m[2]) } : null
-}
-
-const userBinDirs = (): string[] => [join(homedir(), '.local', 'bin'), join(homedir(), '.cargo', 'bin')]
-
 /** Installs, configures and runs mitmdump as a systemd user service. */
 export class ProxyManager {
   private readonly systemd: SystemdUser
@@ -75,34 +54,21 @@ export class ProxyManager {
     this.systemd = new SystemdUser(UNIT, runner)
   }
 
-  async findUv(): Promise<string | null> {
-    return which('uv', userBinDirs())
+  findUv(): Promise<string | null> {
+    return findUv()
   }
 
-  async findMitmdump(): Promise<string | null> {
-    const uv = await this.findUv()
-    const dirs = userBinDirs()
-    if (uv) {
-      // uv's tool bin dir can be moved with UV_TOOL_BIN_DIR / XDG_BIN_HOME.
-      const r = await this.runner(uv, ['tool', 'dir', '--bin'])
-      const dir = r.code === 0 ? r.stdout.trim().split('\n').pop() : undefined
-      if (dir) dirs.unshift(dir)
-    }
-    for (const dir of dirs) {
-      const candidate = join(dir, 'mitmdump')
-      if (await exists(candidate)) return candidate
-    }
-    return which('mitmdump')
+  findMitmdump(): Promise<string | null> {
+    return findUvTool('mitmdump', this.runner)
   }
 
   /** Who listens on the proxy port (same-user processes only; ss cannot see others'). */
-  async portOwner(): Promise<{ pid: number; name: string } | null> {
-    const r = await this.runner('ss', ['-Hltnp', 'sport', '=', `:${this.settings().proxyPort}`])
-    return r.code === 0 ? parseSsOwner(r.stdout) : null
+  portOwner(): Promise<PortOwner | null> {
+    return portOwner(this.settings().proxyPort, this.runner)
   }
 
   /** The port's owner when it is not our service, or null. */
-  async foreignOwner(): Promise<{ pid: number; name: string } | null> {
+  async foreignOwner(): Promise<PortOwner | null> {
     const [owner, mainPid] = await Promise.all([this.portOwner(), this.systemd.mainPid()])
     return owner && owner.pid !== mainPid ? owner : null
   }
@@ -201,7 +167,7 @@ export class ProxyManager {
   /** Throws PortTakenError instead of starting a service that would crash-loop on the port. */
   private async ensurePortFree(): Promise<void> {
     const owner = await this.foreignOwner()
-    if (owner) throw new PortTakenError(this.settings().proxyPort, owner)
+    if (owner) throw new PortTakenError(this.settings().proxyPort, owner, 'proxy')
   }
 
   /** mitmdump creates its CA on first start; both port and CA must be there. */
@@ -217,11 +183,3 @@ export class ProxyManager {
   }
 }
 
-export class PortTakenError extends Error {
-  constructor(
-    readonly port: number,
-    readonly owner: { pid: number; name: string }
-  ) {
-    super(`port ${port} is held by ${owner.name} (pid ${owner.pid}), not by our service; stop it first`)
-  }
-}

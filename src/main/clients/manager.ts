@@ -128,7 +128,7 @@ export class ClientManager extends EventEmitter {
     let down: string | null | undefined // proxy state, probed at most once per check
     for (const adapter of this.adapters) {
       const prefs = this.store.client(adapter.id)
-      let { state, detail } = await adapter.inspect(env)
+      let { state, detail } = await adapter.inspect(env, prefs.applied)
       let suspended = false
 
       if (prefs.enabled && state === 'applied') {
@@ -137,7 +137,7 @@ export class ClientManager extends EventEmitter {
           try {
             await adapter.remove(prefs.applied, env)
             await this.store.updateClient(adapter.id, { applied: null })
-            ;({ state } = await adapter.inspect(env))
+            ;({ state } = await adapter.inspect(env, null))
             detail = `proxy down (${down}): settings removed until it is back`
             suspended = true
           } catch (err) {
@@ -155,7 +155,7 @@ export class ClientManager extends EventEmitter {
           try {
             const applied = await adapter.apply(env, prefs.applied)
             await this.store.updateClient(adapter.id, { applied })
-            ;({ state, detail } = await adapter.inspect(env))
+            ;({ state, detail } = await adapter.inspect(env, applied))
             detail = `restored: ${detail}`
           } catch (err) {
             detail = `restore failed: ${(err as Error).message}`

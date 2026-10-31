@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import type { AppStatus, ClientInfo, ComponentStatus, CompressorStats, Health, ProxyInfo } from '@shared/ipc'
+import type { AppStatus, ClientInfo, ComponentStatus, CompressorInfo, CompressorStats, Health, ProxyInfo } from '@shared/ipc'
 
 /** Combines component health: any down -> down, all ok -> ok, all unknown -> unknown, else degraded. */
 export function overallHealth(parts: Health[]): Health {
@@ -38,10 +38,23 @@ export function proxyStatus(info: ProxyInfo): ComponentStatus {
   return { health: 'down', detail: `service is stopped; nothing listens on ${where}` }
 }
 
+/** One line for the Compressor card: the /health result, explained with what is installed and who runs it. */
+export function compressorStatus(info: CompressorInfo, health: ComponentStatus): ComponentStatus {
+  if (health.health !== 'down') {
+    const by = info.managed === 'ours' ? 'run by this app' : 'run outside this app'
+    return { ...health, detail: `${health.detail}; ${by}` }
+  }
+  if (!info.local) return health
+  if (!info.binary) return { health: 'down', detail: `${health.detail}; headroom is not installed` }
+  if (info.unit === 'missing') return { health: 'down', detail: `${health.detail}; set it up to run it here` }
+  return { health: 'down', detail: `${health.detail}; the headroom service is ${info.active ? 'starting' : 'stopped'}` }
+}
+
 export interface StatusSources {
   proxyInfo(): Promise<ProxyInfo>
   proxy(info: ProxyInfo): Promise<ComponentStatus>
-  compressor(): Promise<ComponentStatus>
+  compressorInfo(): Promise<CompressorInfo>
+  compressor(info: CompressorInfo): Promise<ComponentStatus>
   stats(): Promise<CompressorStats>
   clients(): Promise<ClientInfo[]>
 }
@@ -55,6 +68,7 @@ export class StatusMonitor extends EventEmitter {
     proxy: unknown,
     proxyInfo: null,
     compressor: unknown,
+    compressorInfo: null,
     clients: unknown,
     clientList: [],
     stats: null,
@@ -71,12 +85,15 @@ export class StatusMonitor extends EventEmitter {
   }
 
   async refresh(): Promise<AppStatus> {
-    const [proxyInfo, compressor, clientList] = await Promise.all([
+    const [proxyInfo, compressorInfo, clientList] = await Promise.all([
       this.sources.proxyInfo(),
-      this.sources.compressor(),
+      this.sources.compressorInfo(),
       this.sources.clients()
     ])
-    const proxy = await this.sources.proxy(proxyInfo)
+    const [proxy, compressor] = await Promise.all([
+      this.sources.proxy(proxyInfo),
+      this.sources.compressor(compressorInfo)
+    ])
     let stats = this.status.stats // keep the last numbers if headroom blips
     if (compressor.health === 'ok') {
       try {
@@ -91,6 +108,7 @@ export class StatusMonitor extends EventEmitter {
       proxy,
       proxyInfo,
       compressor,
+      compressorInfo,
       clients,
       clientList,
       stats,

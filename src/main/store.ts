@@ -53,6 +53,11 @@ export class AppStore {
     return this.data.clients[id] ?? { enabled: false, applied: null }
   }
 
+  async update(patch: Partial<Omit<Settings, 'clients'>>): Promise<void> {
+    this.data = { ...this.data, ...patch }
+    await writeJsonAtomic(this.path, this.data)
+  }
+
   async updateClient(id: string, patch: Partial<ClientPrefs>): Promise<void> {
     this.data.clients[id] = { ...this.client(id), ...patch }
     await writeJsonAtomic(this.path, this.data)

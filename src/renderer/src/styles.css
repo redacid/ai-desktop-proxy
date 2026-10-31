@@ -94,3 +94,17 @@ button.link { border: none; background: none; color: var(--muted); text-decorati
 }
 .install { margin-top: 16px; }
 .install header { justify-content: space-between; }
+.top-actions { display: flex; gap: 8px; }
+.settings { margin-bottom: 16px; display: grid; gap: 14px; }
+.settings header { display: flex; justify-content: space-between; align-items: center; }
+.settings label { display: grid; gap: 4px; }
+.settings label > span { font-weight: 600; font-size: 13px; }
+.settings input[type="number"], .settings input[type="url"] {
+  font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); max-width: 360px;
+}
+.settings small { color: var(--muted); font-size: 12px; }
+.settings label.check { display: flex; align-items: center; gap: 8px; }
+.settings label.check span { font-weight: normal; }
+.saved { color: var(--ok); font-size: 13px; align-self: center; }
+.error-inline { color: var(--down); font-size: 13px; align-self: center; white-space: pre-wrap; }

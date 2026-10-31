@@ -97,6 +97,15 @@ describe('ClientManager', () => {
     expect(m.list[0].state).toBe('applied')
   })
 
+  it('moves an enabled client to a new port without calling it a conflict', async () => {
+    const m = manager()
+    await m.setEnabled('claude-code', true)
+    store.settings.proxyPort = 9999
+    await m.checkNow()
+    expect(m.list[0].state).toBe('applied')
+    expect((await env())?.HTTPS_PROXY).toBe('http://127.0.0.1:9999')
+  })
+
   it('reports a foreign value instead of overwriting it', async () => {
     const m = manager()
     await m.setEnabled('claude-code', true)

@@ -21,15 +21,33 @@ export const run: Runner = (cmd, args) =>
 export function runStreaming(cmd: string, args: string[], onLine: (line: string) => void): Promise<number> {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] })
-    const feed = (chunk: Buffer): void => {
-      for (const line of chunk.toString().split(/\r?\n/)) if (line.trim()) onLine(line)
+    // Chunks can end mid-line; keep the tail of each stream until its newline arrives.
+    const feeder = (): { feed: (chunk: Buffer) => void; flush: () => void } => {
+      let rest = ''
+      return {
+        feed: (chunk) => {
+          const lines = (rest + chunk.toString()).split(/\r?\n/)
+          rest = lines.pop() ?? ''
+          for (const line of lines) if (line.trim()) onLine(line)
+        },
+        flush: () => {
+          if (rest.trim()) onLine(rest)
+          rest = ''
+        }
+      }
     }
-    child.stdout.on('data', feed)
-    child.stderr.on('data', feed)
+    const out = feeder()
+    const err = feeder()
+    child.stdout.on('data', out.feed)
+    child.stderr.on('data', err.feed)
     child.on('error', (err) => {
       onLine(`error: ${err.message}`)
       resolve(127)
     })
-    child.on('close', (code) => resolve(code ?? 1))
+    child.on('close', (code) => {
+      out.flush()
+      err.flush()
+      resolve(code ?? 1)
+    })
   })
 }

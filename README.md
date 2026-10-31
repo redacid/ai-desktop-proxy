@@ -26,7 +26,14 @@ The original shell version lives in [`legacy/`](legacy/).
   `/health` and straight to the API when it does not, so Claude keeps working without compression.
 - Stopping or removing the proxy from the app first removes the proxy settings from every client; they come back
   when the proxy is started again. If the proxy dies on its own for more than ~5 s, the same happens automatically.
-- Not yet: installing/starting headroom itself, a settings page (port, headroom URL), autostart, packaging checks.
+- headroom: when nothing answers at the headroom URL, the app can install headroom
+  (`uv tool install --python 3.13 "headroom-ai[all]"`, after asking) and run it as
+  `claude-desktop-proxy-headroom.service` (proxy variables unset, so it never loops through mitmproxy).
+  A headroom run elsewhere (e.g. Headroom Desktop) is only monitored, never started or stopped.
+- Settings: proxy port, headroom URL, check interval, auto-restore, start at login (an XDG autostart entry that
+  starts the app hidden in the tray). Changing the port or URL restarts the services the app runs and re-points
+  routed clients; settings written for the old port are updated, not reported as a conflict.
+- Not yet: packaging checks (AppImage/deb), Codex and Cursor, macOS.
 
 App state lives in `~/.config/claude-desktop-proxy/state.json`; the first edit of a client config keeps a backup
 next to it (`settings.json.bak-claude-desktop-proxy`).

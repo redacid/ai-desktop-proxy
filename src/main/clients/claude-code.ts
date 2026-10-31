@@ -66,7 +66,7 @@ export class ClaudeCodeAdapter implements ClientAdapter {
     await writeJsonAtomic(this.configPath, settings)
   }
 
-  async inspect(env: ProxyEnv): Promise<Inspection> {
+  async inspect(env: ProxyEnv, record: AppliedRecord | null = null): Promise<Inspection> {
     let settings: Settings | null
     try {
       settings = await this.read()
@@ -79,11 +79,16 @@ export class ClaudeCodeAdapter implements ClientAdapter {
         : { state: 'missing', detail: `${this.claudeDir} not found; is Claude Code installed?` }
     }
     const e = settings.env ?? {}
+    const foreign = (key: string, ours: string, previous: string | undefined): boolean =>
+      e[key] !== undefined && e[key] !== ours && e[key] !== previous
     const conflicts = [
-      e[HTTPS_PROXY] !== undefined && e[HTTPS_PROXY] !== env.proxyUrl ? `${HTTPS_PROXY}=${String(e[HTTPS_PROXY])}` : null,
-      e[CA] !== undefined && e[CA] !== env.caFile ? `${CA}=${String(e[CA])}` : null
+      foreign(HTTPS_PROXY, env.proxyUrl, record?.proxyUrl) ? `${HTTPS_PROXY}=${String(e[HTTPS_PROXY])}` : null,
+      foreign(CA, env.caFile, record?.caFile) ? `${CA}=${String(e[CA])}` : null
     ].filter((c): c is string => c !== null)
     if (conflicts.length) return { state: 'conflict', detail: `already set by someone else: ${conflicts.join(', ')}` }
+
+    const stale = (e[HTTPS_PROXY] !== undefined && e[HTTPS_PROXY] !== env.proxyUrl) || (e[CA] !== undefined && e[CA] !== env.caFile)
+    if (stale) return { state: 'partial', detail: `points at our old settings (${String(e[HTTPS_PROXY])}); needs an update` }
 
     const hosts = splitHosts(e[NO_PROXY])
     const have = {

@@ -134,3 +134,13 @@ describe('parseSsOwner', () => {
     expect(parseSsOwner('')).toBeNull()
   })
 })
+
+describe('runStreaming', () => {
+  it('reports whole lines even when output arrives in pieces', async () => {
+    const { runStreaming } = await import('./exec')
+    const lines: string[] = []
+    const code = await runStreaming('sh', ['-c', 'printf "one\\ntw"; sleep 0.1; printf "o\\nthree"'], (l) => lines.push(l))
+    expect(code).toBe(0)
+    expect(lines).toEqual(['one', 'two', 'three'])
+  })
+})

@@ -17,6 +17,8 @@ export interface UnitSpec {
   description: string
   exec: string
   args: string[]
+  /** Variables removed from the service environment (systemd's user manager may carry them). */
+  unsetEnv?: string[]
 }
 
 export function renderUnit(spec: UnitSpec): string {
@@ -27,7 +29,7 @@ Description=${spec.description}
 After=network-online.target
 
 [Service]
-ExecStart=${execStart}
+ExecStart=${execStart}${spec.unsetEnv?.length ? `\nUnsetEnvironment=${spec.unsetEnv.join(' ')}` : ''}
 Restart=always
 RestartSec=2
 

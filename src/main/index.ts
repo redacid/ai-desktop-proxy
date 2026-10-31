@@ -1,34 +1,50 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { IPC, type ActionResult, type ProxyAction } from '@shared/ipc'
+import {
+  IPC,
+  type ActionResult,
+  type CompressorAction,
+  type ProxyAction,
+  type UserSettings
+} from '@shared/ipc'
+import { Autostart } from './autostart'
 import { ClaudeCodeAdapter } from './clients/claude-code'
 import { ClientManager } from './clients/manager'
 import { HeadroomBackend } from './compressors/headroom'
+import { HEADROOM_PACKAGE, HEADROOM_PYTHON, HeadroomService, localEndpoint } from './compressors/headroom-service'
 import { resourcePath } from './paths'
-import { defaultUnitFile, PortTakenError, ProxyManager } from './proxy/manager'
+import { defaultUnitFile, ProxyManager } from './proxy/manager'
+import { findUv, PortTakenError } from './proxy/tools'
 import { isPortListening } from './proxy-env'
-import { proxyStatus, StatusMonitor } from './status'
+import { normalizeUrl, validateSettings } from './settings'
+import { compressorStatus, proxyStatus, StatusMonitor } from './status'
 import { AppStore } from './store'
 import { AppTray } from './tray'
 import { createMainWindow } from './window'
 
 const FAST_POLL_MS = 5_000 // window visible
 const SLOW_POLL_MS = 30_000 // window hidden in the tray
+const UV_GUIDE = 'https://docs.astral.sh/uv/getting-started/installation/'
 
 let win: BrowserWindow | null = null
 let tray: AppTray | null = null
 let quitting = false
-let busy = false // one proxy action at a time
+let busy = false // one service action at a time
 let wasListening: boolean | null = null
 
 const store = new AppStore(join(app.getPath('userData'), 'state.json'))
 const clients = new ClientManager([new ClaudeCodeAdapter()], store)
 const headroom = (): HeadroomBackend => new HeadroomBackend(store.settings.headroomUrl)
+const headroomService = new HeadroomService(() => store.settings, () => headroom().answering())
 const proxy = new ProxyManager(() => store.settings, {
   unitFile: defaultUnitFile(),
   addonSource: resourcePath('mitmproxy', 'cdp_addon.py'),
   addonTarget: join(app.getPath('userData'), 'cdp_addon.py')
 })
+// AppImage: the stable .AppImage path; unpacked: the binary; dev: electron + app dir.
+const autostart = new Autostart(() =>
+  process.env.APPIMAGE ? [process.env.APPIMAGE] : app.isPackaged ? [process.execPath] : [process.execPath, app.getAppPath()]
+)
 
 const monitor = new StatusMonitor({
   proxyInfo: () => proxy.info(),
@@ -41,7 +57,8 @@ const monitor = new StatusMonitor({
     wasListening = info.listening
     return proxyStatus(info)
   },
-  compressor: () => headroom().health(),
+  compressorInfo: () => headroomService.info(),
+  compressor: async (info) => compressorStatus(info, await headroom().health()),
   stats: () => headroom().stats(),
   clients: async () => clients.list
 })
@@ -78,19 +95,67 @@ async function confirm(message: string, detail: string, ok: string): Promise<boo
 
 const installLog = (line: string): void => win?.webContents.send(IPC.installLog, line)
 
-/** Runs a proxy action; returns an error message, '' when the user cancelled, or null. */
+/** Null when uv is there; otherwise offers the install guide and returns an error. */
+async function requireUv(what: string): Promise<string | null> {
+  if (await findUv()) return null
+  if (await confirm(`uv is needed to install ${what}`, 'Install uv, then try again. Open the installation guide?', 'Open guide')) {
+    void shell.openExternal(UV_GUIDE)
+  }
+  return 'uv is not installed'
+}
+
+/**
+ * Asks to stop the process that holds a service port (e.g. a mitmdump or headroom
+ * started by hand), then waits for the port to free up.
+ */
+async function offerToFreePort(err: PortTakenError): Promise<boolean> {
+  const ok = await confirm(
+    `Port ${err.port} is held by ${err.owner.name} (pid ${err.owner.pid})`,
+    `It is not the ${err.service} service, so the service cannot start. Stop that process and continue?`,
+    'Stop it'
+  )
+  if (!ok) return false
+  try {
+    process.kill(err.owner.pid, 'SIGTERM')
+  } catch (e) {
+    throw new Error(`could not stop pid ${err.owner.pid}: ${(e as Error).message}`)
+  }
+  for (let i = 0; i < 20 && (await isPortListening(err.port)); i++) await new Promise((r) => setTimeout(r, 250))
+  return true
+}
+
+/** Runs `step`; on a taken port, offers to free it and runs `retry` once. Returns an error, '' if cancelled, or null. */
+async function withPortCheck(step: () => Promise<string | null>, retry = step): Promise<string | null> {
+  try {
+    return await step()
+  } catch (err) {
+    if (!(err instanceof PortTakenError)) throw err
+    if (!(await offerToFreePort(err))) return err.message
+    return retry()
+  }
+}
+
+/** Serialises service actions and turns their outcome into an ActionResult for the UI. */
+async function exclusive(fn: () => Promise<string | null>): Promise<ActionResult> {
+  if (busy) return { ok: false, error: 'another action is still running', status: monitor.current }
+  busy = true
+  try {
+    const error = await fn()
+    const status = await monitor.refresh()
+    return error ? { ok: false, error, status } : { ok: error === null, status }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message, status: await monitor.refresh() }
+  } finally {
+    busy = false
+  }
+}
+
+/** Returns an error message, '' when the user cancelled, or null. */
 async function runProxyAction(action: ProxyAction): Promise<string | null> {
   switch (action) {
     case 'install': {
-      if (!(await proxy.findUv())) {
-        const open = await confirm(
-          'uv is needed to install mitmproxy',
-          'Install uv, then try again. Open the installation guide?',
-          'Open guide'
-        )
-        if (open) void shell.openExternal('https://docs.astral.sh/uv/getting-started/installation/')
-        return 'uv is not installed'
-      }
+      const noUv = await requireUv('mitmproxy')
+      if (noUv) return noUv
       const ok = await confirm(
         'Install mitmproxy and start the proxy?',
         'Runs "uv tool install mitmproxy", then creates and starts the systemd user service ' +
@@ -106,13 +171,11 @@ async function runProxyAction(action: ProxyAction): Promise<string | null> {
       break
     }
     case 'setup':
+    case 'restart': // setup rewrites the unit too, so a restart also applies changed settings
       await proxy.setup()
       break
     case 'start':
       await proxy.start()
-      break
-    case 'restart':
-      await proxy.setup() // rewrites the unit too, so a restart also applies changed settings
       break
     case 'stop':
     case 'remove': {
@@ -137,50 +200,112 @@ async function runProxyAction(action: ProxyAction): Promise<string | null> {
   return null
 }
 
-/**
- * Asks to stop the process that holds the proxy port (typically a mitmdump left
- * from an earlier manual run), then waits for the port to free up.
- */
-async function offerToFreePort(err: PortTakenError): Promise<boolean> {
-  const ok = await confirm(
-    `Port ${err.port} is held by ${err.owner.name} (pid ${err.owner.pid})`,
-    'It is not the proxy service, so the service cannot start. Stop that process and continue?',
-    'Stop it'
+const proxyAction = (action: ProxyAction): Promise<ActionResult> =>
+  exclusive(() =>
+    withPortCheck(
+      () => runProxyAction(action),
+      // An install already got this far; only the service step is left.
+      () => runProxyAction(action === 'install' ? 'setup' : action)
+    )
   )
-  if (!ok) return false
-  try {
-    process.kill(err.owner.pid, 'SIGTERM')
-  } catch (e) {
-    throw new Error(`could not stop pid ${err.owner.pid}: ${(e as Error).message}`)
+
+/** headroom actions. Stopping it needs no client changes: the proxy falls back to the API. */
+async function runCompressorAction(action: CompressorAction): Promise<string | null> {
+  const { headroomUrl } = store.settings
+  const ep = localEndpoint(headroomUrl)
+  switch (action) {
+    case 'install': {
+      const noUv = await requireUv('headroom')
+      if (noUv) return noUv
+      if (!ep) return `${headroomUrl} is not a local http URL; change it in Settings to run headroom here`
+      const ok = await confirm(
+        'Install headroom and start it?',
+        `Runs "uv tool install --python ${HEADROOM_PYTHON} ${HEADROOM_PACKAGE}" (a few hundred MB), then creates ` +
+          `and starts the systemd user service claude-desktop-proxy-headroom.service on ${ep.host}:${ep.port}.`,
+        'Install'
+      )
+      if (!ok) return ''
+      await headroomService.install(installLog)
+      installLog('Starting headroom (first start can take a minute)…')
+      await headroomService.setup()
+      installLog('headroom is running.')
+      break
+    }
+    case 'setup':
+    case 'restart':
+      await headroomService.setup()
+      break
+    case 'start':
+      await headroomService.start()
+      break
+    case 'stop':
+      await headroomService.stop()
+      break
+    case 'remove': {
+      const ok = await confirm(
+        'Remove the headroom service?',
+        'Stops and deletes claude-desktop-proxy-headroom.service. headroom itself stays installed ' +
+          '(uv tool uninstall headroom-ai removes it). The proxy sends requests straight to the API meanwhile.',
+        'Remove'
+      )
+      if (!ok) return ''
+      await headroomService.remove()
+      break
+    }
   }
-  for (let i = 0; i < 20 && (await isPortListening(err.port)); i++) await new Promise((r) => setTimeout(r, 250))
-  return true
+  return null
 }
 
-async function runWithPortCheck(action: ProxyAction): Promise<string | null> {
-  try {
-    return await runProxyAction(action)
-  } catch (err) {
-    if (!(err instanceof PortTakenError)) throw err
-    if (!(await offerToFreePort(err))) return err.message
-    // An install already got this far; only the service step is left.
-    return runProxyAction(action === 'install' ? 'setup' : action)
-  }
+const compressorAction = (action: CompressorAction): Promise<ActionResult> =>
+  exclusive(() =>
+    withPortCheck(
+      () => runCompressorAction(action),
+      () => runCompressorAction(action === 'install' ? 'setup' : action)
+    )
+  )
+
+async function getSettings(): Promise<UserSettings> {
+  const { proxyPort, headroomUrl, autoRepair, checkIntervalSec } = store.settings
+  return { proxyPort, headroomUrl, autoRepair, checkIntervalSec, autostart: await autostart.isEnabled() }
 }
 
-async function proxyAction(action: ProxyAction): Promise<ActionResult> {
-  if (busy) return { ok: false, error: 'another proxy action is still running', status: monitor.current }
-  busy = true
-  try {
-    const error = await runWithPortCheck(action)
-    const status = await monitor.refresh()
-    return error === null || error === '' ? { ok: error === null, status } : { ok: false, error, status }
-  } catch (err) {
-    return { ok: false, error: (err as Error).message, status: await monitor.refresh() }
-  } finally {
-    busy = false
-  }
-}
+/**
+ * Saves settings and carries them through: services we run move to the new
+ * port/URL, then clients are re-pointed at the proxy's new address.
+ */
+const saveSettings = (input: UserSettings): Promise<ActionResult> =>
+  exclusive(async () => {
+    const next = { ...input, headroomUrl: normalizeUrl(input.headroomUrl) }
+    const invalid = validateSettings(next)
+    if (invalid) return invalid
+
+    const before = { ...store.settings }
+    const [proxyInfo, headroomInfo] = await Promise.all([proxy.info(), headroomService.info()])
+    await store.update({
+      proxyPort: next.proxyPort,
+      headroomUrl: next.headroomUrl,
+      autoRepair: next.autoRepair,
+      checkIntervalSec: next.checkIntervalSec
+    })
+    await autostart.set(next.autostart)
+
+    const urlChanged = before.headroomUrl !== next.headroomUrl
+    if (urlChanged && headroomInfo.unit !== 'missing') {
+      if (localEndpoint(next.headroomUrl)) {
+        const err = await withPortCheck(async () => (await headroomService.setup(), null))
+        if (err) return `settings saved, but headroom did not move: ${err}`
+      } else {
+        await headroomService.stop() // the URL now points elsewhere; our service is not used
+      }
+    }
+    if ((urlChanged || before.proxyPort !== next.proxyPort) && proxyInfo.unit !== 'missing') {
+      const err = await withPortCheck(async () => (await proxy.setup(), null))
+      if (err) return `settings saved, but the proxy did not restart: ${err}`
+    }
+    if (before.checkIntervalSec !== next.checkIntervalSec) clients.start()
+    await clients.resume() // re-points enabled clients at the new proxy address
+    return null
+  })
 
 // One instance only: a second launch brings the existing window forward.
 if (!app.requestSingleInstanceLock()) {
@@ -199,6 +324,10 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle(IPC.setClientEnabled, (_e, id: string, enabled: boolean) => setClientEnabled(id, enabled))
     ipcMain.handle(IPC.proxyAction, (_e, action: ProxyAction) => proxyAction(action))
     ipcMain.handle(IPC.proxyLogs, () => proxy.logs(80))
+    ipcMain.handle(IPC.compressorAction, (_e, action: CompressorAction) => compressorAction(action))
+    ipcMain.handle(IPC.compressorLogs, () => headroomService.logs(80))
+    ipcMain.handle(IPC.getSettings, () => getSettings())
+    ipcMain.handle(IPC.saveSettings, (_e, s: UserSettings) => saveSettings(s))
 
     tray = new AppTray({
       show: showWindow,

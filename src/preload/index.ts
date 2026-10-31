@@ -7,6 +7,10 @@ const api: Api = {
   setClientEnabled: (id, enabled) => ipcRenderer.invoke(IPC.setClientEnabled, id, enabled),
   proxyAction: (action) => ipcRenderer.invoke(IPC.proxyAction, action),
   proxyLogs: () => ipcRenderer.invoke(IPC.proxyLogs),
+  compressorAction: (action) => ipcRenderer.invoke(IPC.compressorAction, action),
+  compressorLogs: () => ipcRenderer.invoke(IPC.compressorLogs),
+  getSettings: () => ipcRenderer.invoke(IPC.getSettings),
+  saveSettings: (settings) => ipcRenderer.invoke(IPC.saveSettings, settings),
   onInstallLog: (listener) => {
     const handler = (_: unknown, line: string): void => listener(line)
     ipcRenderer.on(IPC.installLog, handler)

@@ -20,7 +20,8 @@ export interface ClientAdapter {
   readonly configPath: string
   /** Paths whose changes should trigger a re-check (watched as directories). */
   watchPaths(): string[]
-  inspect(env: ProxyEnv): Promise<Inspection>
+  /** `record` = what we wrote before; values matching it are ours (e.g. an old port), not a conflict. */
+  inspect(env: ProxyEnv, record?: AppliedRecord | null): Promise<Inspection>
   /** Writes our settings; throws ClientConflictError instead of overwriting foreign values. */
   apply(env: ProxyEnv, previous: AppliedRecord | null): Promise<AppliedRecord>
   /** Removes only what `record` says we wrote (falls back to `env` when there is no record). */
