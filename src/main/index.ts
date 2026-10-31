@@ -35,7 +35,6 @@ let busy = false // one service action at a time
 let wasListening: boolean | null = null
 
 const store = new AppStore(join(app.getPath('userData'), 'state.json'))
-const clients = new ClientManager([new ClaudeCodeAdapter(), new CodexAdapter()], store)
 const headroom = (): HeadroomBackend => new HeadroomBackend(store.settings.headroomUrl)
 const headroomService = new HeadroomService(() => store.settings, () => headroom().answering())
 const proxy = new ProxyManager(() => store.settings, {
@@ -43,6 +42,9 @@ const proxy = new ProxyManager(() => store.settings, {
   addonSource: resourcePath('mitmproxy', 'cdp_addon.py'),
   addonTarget: join(app.getPath('userData'), 'cdp_addon.py')
 })
+const clients = new ClientManager([new ClaudeCodeAdapter(), new CodexAdapter()], store, undefined, undefined, undefined, (port) =>
+  proxy.ownsPort(port)
+)
 // AppImage: the stable .AppImage path; unpacked: the binary; dev: electron + app dir.
 const autostart = new Autostart(() =>
   process.env.APPIMAGE ? [process.env.APPIMAGE] : app.isPackaged ? [process.execPath] : [process.execPath, app.getAppPath()]

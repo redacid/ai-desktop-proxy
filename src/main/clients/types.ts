@@ -23,6 +23,11 @@ export interface ClientAdapter {
   readonly configPath: string
   /** Paths whose changes should trigger a re-check (watched as directories). */
   watchPaths(): string[]
+  /**
+   * A local port the client sends credentials to in plain HTTP. It may point there
+   * only while our service holds that port, or another user's process could take it.
+   */
+  plaintextPort?(env: ProxyEnv): number
   /** `record` = what we wrote before; values matching it are ours (e.g. an old port), not a conflict. */
   inspect(env: ProxyEnv, record?: AppliedRecord | null): Promise<Inspection>
   /** Writes our settings; throws ClientConflictError instead of overwriting foreign values. */

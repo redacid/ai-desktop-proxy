@@ -9,6 +9,7 @@ export interface ProxyEnv {
   noProxyHosts: string[] // merged into NO_PROXY
   /** Base URL for clients that cannot use an HTTPS proxy (Codex's openai_base_url). */
   openaiBaseUrl: string
+  codexPort: number
 }
 
 export const DEFAULT_PORT = 8877
@@ -22,7 +23,8 @@ export function buildProxyEnv(port: number, caFile = DEFAULT_CA_FILE, codexPort 
     proxyUrl: `http://127.0.0.1:${port}`,
     caFile,
     noProxyHosts: [...LOCAL_HOSTS],
-    openaiBaseUrl: `http://127.0.0.1:${codexPort}/v1`
+    openaiBaseUrl: `http://127.0.0.1:${codexPort}/v1`,
+    codexPort
   }
 }
 

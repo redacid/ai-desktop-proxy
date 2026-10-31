@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { AppStore } from '../store'
 import { ClaudeCodeAdapter } from './claude-code'
+import { CodexAdapter } from './codex'
 import { ClientManager } from './manager'
 
 let dir: string
@@ -113,5 +114,40 @@ describe('ClientManager', () => {
     await m.checkNow()
     expect(m.list[0].state).toBe('conflict')
     expect((await env())?.HTTPS_PROXY).toBe('http://corp:3128')
+  })
+
+  describe('Codex (plaintext port)', () => {
+    let codexConfig: string
+    let ours: boolean
+    const codexManager = (): ClientManager =>
+      new ClientManager([new CodexAdapter(codexConfig)], store, async () => proxyUp, async () => true, 0, async () => ours)
+    const config = (): Promise<string> => fs.readFile(codexConfig, 'utf8')
+
+    beforeEach(async () => {
+      codexConfig = join(dir, 'config.toml')
+      await fs.writeFile(codexConfig, 'model = "x"\n')
+      ours = true
+    })
+
+    it('refuses to enable while our service does not hold the port', async () => {
+      ours = false
+      expect(await codexManager().setEnabled('codex', true)).toMatch(/not held by our proxy service/)
+      expect(await config()).toBe('model = "x"\n')
+    })
+
+    it('pulls the base URL when someone else takes the port, and restores it once ours again', async () => {
+      const m = codexManager()
+      expect(await m.setEnabled('codex', true)).toBeNull()
+      expect(await config()).toContain('openai_base_url')
+
+      ours = false
+      await m.checkNow()
+      expect(await config()).toBe('model = "x"\n')
+      expect(store.client('codex').enabled).toBe(true)
+
+      ours = true
+      await m.checkNow()
+      expect(await config()).toContain('openai_base_url')
+    })
   })
 })

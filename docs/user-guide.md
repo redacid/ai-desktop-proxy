@@ -82,6 +82,10 @@ Codex shows **conflict** when its config already sets `openai_base_url` to somet
 A profile (`[profiles.*]`) with its own `openai_base_url` or `model_provider` also bypasses the proxy while it is
 selected. If you edit the app's line by hand, turning Codex off asks you to remove it yourself.
 
+Codex sends its API key or ChatGPT token to port 8878 unencrypted (it never leaves the machine). So the app turns
+Codex on only while it can see its own proxy service holding that port. If another process takes the port, the
+app removes the line within a few seconds and puts it back once the service holds the port again.
+
 ### headroom savings
 
 Lifetime totals (tokens saved, money saved by compression and by cache, requests), the current headroom session,

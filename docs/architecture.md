@@ -54,6 +54,11 @@ port>/v1`. Codex talks plain HTTP and WebSocket to it, so no certificate is invo
 3. `api.openai.com:443` is in `--allow-hosts` so the reverse listener's TLS to it is handled by mitmproxy. On the
    regular listener a `CONNECT` to api.openai.com is therefore decrypted too, but the addon leaves those requests
    alone: only the reverse listener's OpenAI traffic is routed.
+4. Codex sends its API key or ChatGPT token to the reverse listener in plain HTTP. Any local user could bind that
+   port while our service is not on it, so the adapter declares it as `plaintextPort()`, and `ClientManager` lets
+   Codex point there only while `ProxyManager.ownsPort` sees our service's main PID listening on it. `ss` cannot
+   see other users' processes, so an unidentified owner counts as not ours. When ownership is lost for more than
+   the 5 s confirmation, the base URL is removed like in the failsafe below.
 
 ## Main-process modules
 
@@ -128,6 +133,7 @@ These protect the user's configs and running sessions; keep them when changing c
 - Writes are atomic, keep symlinks (dotfiles), file mode and Unicode, and leave no temp files.
 - Clients first on the way down (remove settings, then stop the proxy); proxy first on the way up.
 - Never enable a client while nothing listens on the proxy port or the Codex port (one mitmdump serves both).
+- Never point a client at a plain-HTTP port (Codex) unless our service's main process is seen holding it.
 - Never start a service on a port another process holds; name the process and ask before stopping it.
 - Never touch a headroom the app did not start.
 - Install anything only after the user confirms a dialog that names the command.

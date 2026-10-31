@@ -29,7 +29,9 @@ export class ClientManager extends EventEmitter {
     private readonly proxyUp: (port: number) => Promise<boolean> = isPortListening,
     private readonly caExists: (path: string) => Promise<boolean> = exists,
     /** How long the proxy must stay down before client settings are pulled. */
-    private readonly confirmDownMs = 5000
+    private readonly confirmDownMs = 5000,
+    /** Whether our proxy service holds a port; fails closed by default. */
+    private readonly portOurs: (port: number) => Promise<boolean> = async () => false
   ) {
     super()
   }
@@ -41,6 +43,23 @@ export class ClientManager extends EventEmitter {
   private env(): ProxyEnv {
     const { proxyPort, caFile, codexPort } = this.store.settings
     return buildProxyEnv(proxyPort, caFile, codexPort)
+  }
+
+  /** Why turning this client on now would break it or leak its credentials, or null when it is safe. */
+  private async clientProblem(adapter: ClientAdapter): Promise<string | null> {
+    const problem = await this.proxyProblem()
+    if (problem || !adapter.plaintextPort) return problem
+    const port = adapter.plaintextPort(this.env())
+    return (await this.portOurs(port))
+      ? null
+      : `127.0.0.1:${port} is not held by our proxy service, and ${adapter.name} would send its credentials there unencrypted`
+  }
+
+  /** Like clientProblem, but only once it persists past a short wait (not just a restart). */
+  private async clientProblemConfirmed(adapter: ClientAdapter): Promise<string | null> {
+    if (!(await this.clientProblem(adapter))) return null
+    await new Promise((r) => setTimeout(r, this.confirmDownMs))
+    return this.clientProblem(adapter)
   }
 
   /** Why turning a client on now would break it, or null when it is safe. */
@@ -137,12 +156,13 @@ export class ClientManager extends EventEmitter {
 
       if (prefs.enabled && state === 'applied') {
         down ??= await this.proxyDownConfirmed()
-        if (down) {
+        const problem = down ?? (adapter.plaintextPort ? await this.clientProblemConfirmed(adapter) : null)
+        if (problem) {
           try {
             await adapter.remove(prefs.applied, env)
             await this.store.updateClient(adapter.id, { applied: null })
             ;({ state } = await adapter.inspect(env, null))
-            detail = `proxy down (${down}): settings removed until it is back`
+            detail = `${down ? 'proxy down' : 'unsafe'} (${problem}): settings removed until it is back`
             suspended = true
           } catch (err) {
             detail = `proxy down, could not remove settings: ${(err as Error).message}`
@@ -152,7 +172,7 @@ export class ClientManager extends EventEmitter {
 
       const lost = state === 'absent' || state === 'partial'
       if (prefs.enabled && lost && !suspended && this.store.settings.autoRepair) {
-        const problem = this.held ? 'proxy stopped from the app' : down ?? (await this.proxyProblem())
+        const problem = this.held ? 'proxy stopped from the app' : down ?? (await this.clientProblem(adapter))
         if (problem) {
           detail = `waiting for the proxy, settings will be restored: ${problem}`
         } else {
@@ -195,7 +215,7 @@ export class ClientManager extends EventEmitter {
     const prefs = this.store.client(id)
     try {
       if (enabled) {
-        const problem = await this.proxyProblem()
+        const problem = await this.clientProblem(adapter)
         if (problem) return `not enabled: ${problem}`
         const applied = await adapter.apply(env, prefs.applied)
         await this.store.updateClient(id, { enabled: true, applied })

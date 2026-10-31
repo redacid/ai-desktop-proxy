@@ -60,6 +60,11 @@ export class CodexAdapter implements ClientAdapter {
     return [this.codexDir]
   }
 
+  // Codex sends its API key or ChatGPT token to the reverse listener unencrypted.
+  plaintextPort(env: ProxyEnv): number {
+    return env.codexPort
+  }
+
   /** null = file does not exist. Throws on unreadable or malformed TOML. */
   private async read(): Promise<{ text: string; config: Config } | null> {
     let text: string

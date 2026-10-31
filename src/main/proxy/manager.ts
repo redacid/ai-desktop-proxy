@@ -72,6 +72,12 @@ export class ProxyManager {
     return portOwner(port, this.runner)
   }
 
+  /** True only when our service's main process is seen listening on `port`; unknown counts as no. */
+  async ownsPort(port: number): Promise<boolean> {
+    const [owner, mainPid] = await Promise.all([this.portOwner(port), this.systemd.mainPid()])
+    return !!owner && !!mainPid && owner.pid === mainPid
+  }
+
   /** The first of our ports held by something other than our service, or null. */
   async foreignOwner(): Promise<{ port: number; owner: PortOwner } | null> {
     const { proxyPort, codexPort } = this.settings()
