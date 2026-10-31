@@ -31,8 +31,9 @@ export const pluginKey = (id: ToolId): PluginKey | null => id.startsWith('ponyta
  * The pin in the registration is the installed version; nothing else is installed.
  */
 export const MCP_SERVERS = {
-  serena: { pkg: 'serena-agent', args: (codex: boolean) => ['serena', 'start-mcp-server', '--context', codex ? 'codex' : 'claude-code', '--project-from-cwd'] },
-  markitdown: { pkg: 'markitdown-mcp', args: () => ['markitdown-mcp'] }
+  serena: { pkg: 'serena-agent', uv: [], args: (codex: boolean) => ['serena', 'start-mcp-server', '--context', codex ? 'codex' : 'claude-code', '--project-from-cwd'] },
+  // markitdown[all] 0.1.9 needs a beta that uv skips by default; allow pre-releases only where named.
+  markitdown: { pkg: 'markitdown-mcp', uv: ['--prerelease', 'if-necessary-or-explicit', '--with', 'azure-ai-contentunderstanding>=1.2.0b1'], args: () => ['markitdown-mcp'] }
 } as const
 type McpKey = keyof typeof MCP_SERVERS
 const mcpKey = (id: ToolId): McpKey | null => id === 'serena' || id === 'markitdown' ? id : null
@@ -498,7 +499,7 @@ export class ToolManager extends EventEmitter {
 
   /** Connect, disconnect or re-pin an MCP server with the clients' own `mcp add/remove` commands. */
   private async mcpPlan(info: ToolInfo, key: McpKey, action: ToolAction, plan: ToolPlan): Promise<ToolPlan> {
-    const { pkg, args } = MCP_SERVERS[key]
+    const { pkg, uv, args } = MCP_SERVERS[key]
     const name = info.id
     const uvx = (await this.find('uvx'))!
     const cli = async (codex: boolean): Promise<string> => {
@@ -507,7 +508,7 @@ export class ToolManager extends EventEmitter {
       return found
     }
     const add = async (codex: boolean, version: string): Promise<Command> => {
-      const server = [uvx, '--python', MCP_PYTHON, '--from', `${pkg}==${version}`, ...args(codex)]
+      const server = [uvx, '--python', MCP_PYTHON, ...uv, '--from', `${pkg}==${version}`, ...args(codex)]
       return { cmd: await cli(codex), args: codex ? ['mcp', 'add', name, '--', ...server] : ['mcp', 'add', '--scope', 'user', name, '--', ...server] }
     }
     const remove = async (codex: boolean): Promise<Command> =>

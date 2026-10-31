@@ -447,6 +447,9 @@ describe('MCP servers and Chisle', () => {
       '/fake/uvx', '--python', '3.13', '--from', 'serena-agent==0.41.0', 'serena', 'start-mcp-server', '--context', 'claude-code', '--project-from-cwd'] }])
     await expect(f.manager.plan('serena', 'disconnect-codex')).rejects.toThrow(/did not add/)
     await expect(f.manager.plan('serena', 'install')).rejects.toThrow()
+    const md = await f.manager.plan('markitdown', 'connect-codex')
+    expect(md.commands[0].args).toEqual(['mcp', 'add', 'markitdown', '--', '/fake/uvx', '--python', '3.13',
+      '--prerelease', 'if-necessary-or-explicit', '--with', 'azure-ai-contentunderstanding>=1.2.0b1', '--from', 'markitdown-mcp==0.41.0', 'markitdown-mcp'])
   })
 
   it('plans Chisle like Ponytail, from its own marketplace', async () => {
