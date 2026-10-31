@@ -53,6 +53,10 @@ export interface ProxyInfo {
   unit: 'missing' | 'legacy' | 'outdated' | 'current'
   active: boolean
   listening: boolean
+  /** Process listening on the port, when it can be identified. */
+  owner: { pid: number; name: string } | null
+  /** owner is our service's main process */
+  ours: boolean
   caExists: boolean
 }
 

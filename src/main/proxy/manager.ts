@@ -54,6 +54,12 @@ async function which(name: string, extraDirs: string[] = []): Promise<string | n
   return null
 }
 
+/** Parses `ss -Hltnp` output: the first process listening, e.g. users:(("mitmdump",pid=42,fd=7)). */
+export function parseSsOwner(output: string): { pid: number; name: string } | null {
+  const m = /users:\(\("([^"]+)",pid=(\d+)/.exec(output)
+  return m ? { name: m[1], pid: Number(m[2]) } : null
+}
+
 const userBinDirs = (): string[] => [join(homedir(), '.local', 'bin'), join(homedir(), '.cargo', 'bin')]
 
 /** Installs, configures and runs mitmdump as a systemd user service. */
@@ -89,6 +95,18 @@ export class ProxyManager {
     return which('mitmdump')
   }
 
+  /** Who listens on the proxy port (same-user processes only; ss cannot see others'). */
+  async portOwner(): Promise<{ pid: number; name: string } | null> {
+    const r = await this.runner('ss', ['-Hltnp', 'sport', '=', `:${this.settings().proxyPort}`])
+    return r.code === 0 ? parseSsOwner(r.stdout) : null
+  }
+
+  /** The port's owner when it is not our service, or null. */
+  async foreignOwner(): Promise<{ pid: number; name: string } | null> {
+    const [owner, mainPid] = await Promise.all([this.portOwner(), this.systemd.mainPid()])
+    return owner && owner.pid !== mainPid ? owner : null
+  }
+
   private async expectedUnit(mitmdump: string): Promise<string> {
     return renderUnit({
       description: 'Claude Desktop Proxy (mitmdump)',
@@ -99,12 +117,14 @@ export class ProxyManager {
 
   async info(): Promise<ProxyInfo> {
     const s = this.settings()
-    const [mitmdump, uv, listening, caExists, active] = await Promise.all([
+    const [mitmdump, uv, listening, caExists, active, owner, mainPid] = await Promise.all([
       this.findMitmdump(),
       this.findUv(),
       this.listening(s.proxyPort),
       exists(s.caFile),
-      this.systemd.isActive()
+      this.systemd.isActive(),
+      this.portOwner(),
+      this.systemd.mainPid()
     ])
     let unit: ProxyInfo['unit'] = 'missing'
     try {
@@ -116,7 +136,9 @@ export class ProxyManager {
     } catch {
       // no unit file
     }
-    return { port: s.proxyPort, mitmdump, uv, unit, active, listening, caExists }
+    // Without ss output, trust systemd: an active service is assumed to own the port.
+    const ours = owner ? owner.pid === mainPid : active
+    return { port: s.proxyPort, mitmdump, uv, unit, active, listening, caExists, owner, ours }
   }
 
   private async addonIsCurrent(): Promise<boolean> {
@@ -149,6 +171,7 @@ export class ProxyManager {
     await fs.copyFile(this.paths.addonSource, this.paths.addonTarget)
     await fs.mkdir(dirname(this.paths.unitFile), { recursive: true })
     await fs.writeFile(this.paths.unitFile, await this.expectedUnit(mitmdump))
+    await this.ensurePortFree()
     await this.systemd.daemonReload()
     await this.systemd.enable()
     await this.systemd.restart()
@@ -156,6 +179,7 @@ export class ProxyManager {
   }
 
   async start(): Promise<void> {
+    await this.ensurePortFree()
     await this.systemd.start()
     await this.waitUntilServing()
   }
@@ -174,6 +198,12 @@ export class ProxyManager {
     return this.systemd.logs(lines)
   }
 
+  /** Throws PortTakenError instead of starting a service that would crash-loop on the port. */
+  private async ensurePortFree(): Promise<void> {
+    const owner = await this.foreignOwner()
+    if (owner) throw new PortTakenError(this.settings().proxyPort, owner)
+  }
+
   /** mitmdump creates its CA on first start; both port and CA must be there. */
   private async waitUntilServing(timeoutMs = 15_000): Promise<void> {
     const s = this.settings()
@@ -184,5 +214,14 @@ export class ProxyManager {
     }
     const tail = await this.logs(15)
     throw new Error(`proxy did not start on 127.0.0.1:${s.proxyPort} within ${timeoutMs / 1000}s\n${tail}`)
+  }
+}
+
+export class PortTakenError extends Error {
+  constructor(
+    readonly port: number,
+    readonly owner: { pid: number; name: string }
+  ) {
+    super(`port ${port} is held by ${owner.name} (pid ${owner.pid}), not by our service; stop it first`)
   }
 }

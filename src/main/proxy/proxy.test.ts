@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, type Settings } from '../store'
 import type { RunResult } from './exec'
-import { mitmdumpArgs, ProxyManager } from './manager'
+import { mitmdumpArgs, parseSsOwner, PortTakenError, ProxyManager } from './manager'
 import { quoteArg, renderUnit } from './systemd'
 
 describe('quoteArg', () => {
@@ -30,11 +30,15 @@ describe('ProxyManager', () => {
   let calls: string[][]
   let active: boolean
   let listening: boolean
+  let ssOutput: string
+  let mainPid: number
 
   function manager(): ProxyManager {
     const runner = async (cmd: string, args: string[]): Promise<RunResult> => {
       calls.push([cmd, ...args])
       if (args.includes('is-active')) return { code: active ? 0 : 3, stdout: '', stderr: '' }
+      if (cmd === 'ss') return { code: 0, stdout: ssOutput, stderr: '' }
+      if (args.includes('MainPID')) return { code: 0, stdout: `${mainPid}\n`, stderr: '' }
       if (args[0] === 'tool' && args[1] === 'dir') return { code: 0, stdout: join(dir, 'bin') + '\n', stderr: '' }
       if (args.includes('restart') || args.includes('start')) {
         active = listening = true
@@ -57,6 +61,8 @@ describe('ProxyManager', () => {
     settings = { ...DEFAULT_SETTINGS, caFile: join(dir, 'ca.pem') }
     calls = []
     active = listening = false
+    ssOutput = ''
+    mainPid = 0
     await fs.writeFile(join(dir, 'addon.py'), '# addon v1')
     await fs.mkdir(join(dir, 'bin'))
     await fs.writeFile(join(dir, 'bin', 'mitmdump'), '')
@@ -99,10 +105,32 @@ describe('ProxyManager', () => {
     expect((await manager().info()).unit).toBe('legacy')
   })
 
+  it('refuses to start while another process holds the port', async () => {
+    ssOutput = 'LISTEN 0 4096 127.0.0.1:8877 0.0.0.0:* users:(("mitmdump",pid=4242,fd=7))'
+    listening = true
+    const m = manager()
+    await expect(m.setup()).rejects.toBeInstanceOf(PortTakenError)
+    expect(calls.some((c) => c.includes('restart'))).toBe(false)
+    expect(await m.info()).toMatchObject({ ours: false, owner: { pid: 4242, name: 'mitmdump' } })
+  })
+
+  it('treats the port as ours when the service main process holds it', async () => {
+    ssOutput = 'LISTEN 0 4096 127.0.0.1:8877 0.0.0.0:* users:(("mitmdump",pid=99,fd=7))'
+    mainPid = 99
+    expect((await manager().info()).ours).toBe(true)
+  })
+
   it('passes the port and keeps the API-only decryption', () => {
     const args = mitmdumpArgs({ proxyPort: 1234, headroomUrl: 'http://h:1' }, '/a.py')
     expect(args.join(' ')).toContain('--listen-port 1234')
     expect(args).toContain('^api[.]anthropic[.]com:443$')
     expect(args).toContain('connection_strategy=lazy')
+  })
+})
+
+describe('parseSsOwner', () => {
+  it('reads name and pid', () => {
+    expect(parseSsOwner('LISTEN 0 4096 127.0.0.1:8877 0.0.0.0:* users:(("python3",pid=12,fd=3))')).toEqual({ name: 'python3', pid: 12 })
+    expect(parseSsOwner('')).toBeNull()
   })
 })

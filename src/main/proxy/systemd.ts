@@ -71,6 +71,12 @@ export class SystemdUser {
     return (await this.runner('systemctl', ['--user', 'is-active', '--quiet', this.unit])).code === 0
   }
 
+  /** PID of the service's main process, or 0 when it is not running. */
+  async mainPid(): Promise<number> {
+    const r = await this.runner('systemctl', ['--user', 'show', '-p', 'MainPID', '--value', this.unit])
+    return Number.parseInt(r.stdout.trim(), 10) || 0
+  }
+
   async logs(lines: number): Promise<string> {
     const r = await this.runner('journalctl', ['--user', '-u', this.unit, '-n', String(lines), '--no-pager', '-o', 'short-iso'])
     return (r.stdout || r.stderr).trim()

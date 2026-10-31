@@ -5,7 +5,8 @@ import { ClaudeCodeAdapter } from './clients/claude-code'
 import { ClientManager } from './clients/manager'
 import { HeadroomBackend } from './compressors/headroom'
 import { resourcePath } from './paths'
-import { defaultUnitFile, ProxyManager } from './proxy/manager'
+import { defaultUnitFile, PortTakenError, ProxyManager } from './proxy/manager'
+import { isPortListening } from './proxy-env'
 import { proxyStatus, StatusMonitor } from './status'
 import { AppStore } from './store'
 import { AppTray } from './tray'
@@ -136,11 +137,42 @@ async function runProxyAction(action: ProxyAction): Promise<string | null> {
   return null
 }
 
+/**
+ * Asks to stop the process that holds the proxy port (typically a mitmdump left
+ * from an earlier manual run), then waits for the port to free up.
+ */
+async function offerToFreePort(err: PortTakenError): Promise<boolean> {
+  const ok = await confirm(
+    `Port ${err.port} is held by ${err.owner.name} (pid ${err.owner.pid})`,
+    'It is not the proxy service, so the service cannot start. Stop that process and continue?',
+    'Stop it'
+  )
+  if (!ok) return false
+  try {
+    process.kill(err.owner.pid, 'SIGTERM')
+  } catch (e) {
+    throw new Error(`could not stop pid ${err.owner.pid}: ${(e as Error).message}`)
+  }
+  for (let i = 0; i < 20 && (await isPortListening(err.port)); i++) await new Promise((r) => setTimeout(r, 250))
+  return true
+}
+
+async function runWithPortCheck(action: ProxyAction): Promise<string | null> {
+  try {
+    return await runProxyAction(action)
+  } catch (err) {
+    if (!(err instanceof PortTakenError)) throw err
+    if (!(await offerToFreePort(err))) return err.message
+    // An install already got this far; only the service step is left.
+    return runProxyAction(action === 'install' ? 'setup' : action)
+  }
+}
+
 async function proxyAction(action: ProxyAction): Promise<ActionResult> {
   if (busy) return { ok: false, error: 'another proxy action is still running', status: monitor.current }
   busy = true
   try {
-    const error = await runProxyAction(action)
+    const error = await runWithPortCheck(action)
     const status = await monitor.refresh()
     return error === null || error === '' ? { ok: error === null, status } : { ok: false, error, status }
   } catch (err) {

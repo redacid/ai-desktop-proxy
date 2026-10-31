@@ -26,7 +26,10 @@ export function proxyStatus(info: ProxyInfo): ComponentStatus {
   if (info.listening) {
     if (info.unit === 'legacy') return { health: 'degraded', detail: `running from the cdp.sh unit; set it up here to switch` }
     if (info.unit === 'outdated') return { health: 'degraded', detail: `settings or app changed; apply to update the service` }
-    if (!info.active) return { health: 'degraded', detail: `${where} is served by something other than our service` }
+    if (!info.ours) {
+      const who = info.owner ? `${info.owner.name} (pid ${info.owner.pid})` : 'another process'
+      return { health: 'degraded', detail: `${where} is held by ${who}, not by our service; stop it, then Restart` }
+    }
     if (!info.caExists) return { health: 'degraded', detail: 'CA certificate is missing' }
     return { health: 'ok', detail: `listening on ${where}` }
   }
