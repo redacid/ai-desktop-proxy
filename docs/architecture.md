@@ -55,7 +55,7 @@ must never leave clients pointing at a dead proxy port, so the services outlive 
 | `autostart.ts` | XDG autostart entry |
 | `fsutil.ts` | Atomic JSON writes that keep symlinks, permissions and Unicode; one-time backups |
 | `proxy-env.ts` | The proxy environment for clients; TCP port probe |
-| `tray.ts`, `window.ts`, `paths.ts` | Tray menu, window (close hides), resource paths in dev and packaged builds |
+| `tray.ts`, `window.ts`, `paths.ts` | Tray menu and icon (health colour; busy animation while a service action runs), window (close hides), resource paths in dev and packaged builds |
 
 `src/shared/ipc.ts` is the single contract between main and renderer: every channel and every type that crosses
 it is defined there.

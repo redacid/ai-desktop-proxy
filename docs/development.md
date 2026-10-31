@@ -15,6 +15,7 @@ Linux, Node.js 22+, npm, Python 3 (addon tests). `make` with no target lists eve
 | `make test-addon` | Python tests for the mitmproxy addon (no mitmproxy needed) |
 | `make check` | typecheck + test + test-addon: run before every commit |
 | `make dist`, `dist-appimage`, `dist-deb` | electron-builder packages into `dist/` (not verified yet) |
+| `make icons` | Regenerate every icon (SVG sources and PNGs) from `scripts/icons.mjs` |
 | `make clean`, `make distclean` | Remove `out/` and `dist/`; also `node_modules` |
 
 ## Layout
@@ -24,7 +25,11 @@ src/shared/ipc.ts       IPC contract and every type crossing it
 src/main/               main process (see docs/architecture.md)
 src/preload/            window.api over contextBridge
 src/renderer/           React UI (App.tsx, styles.css)
-resources/              tray icons, app icon, mitmproxy addon (shipped as extraResources)
+resources/              icons and the mitmproxy addon (shipped as extraResources)
+  icon.png, icons/      app icon: 512 px and the NxN.png set electron-builder uses for Linux
+  tray/                 tray icons per health (22 px + @2x, plus 16/24/32 sizes) and busy-N animation frames
+  icon-src/             generated SVG sources, static and animated (SMIL)
+scripts/icons.mjs       icon generator
 examples/               sample headroom /stats-history response used by tests
 legacy/                 original cdp.sh + settings_env.py, reference only
 docs/                   user guide, architecture, this file
@@ -75,3 +80,15 @@ active one in settings, and passing its URL to the addon as `cdp_upstream`.
 - TypeScript strict, no unused locals; no shell strings: run commands with argument arrays (`proxy/exec.ts`).
 - Comments explain why, not what.
 - Every user-visible behaviour change updates `docs/` and the README status in the same commit.
+
+## Icons
+
+All icons come from one generator, `scripts/icons.mjs`; edit it and run `make icons`, never the PNGs by hand.
+The output is committed, so building the app needs no browser. The generator renders with Playwright's Chromium,
+which it resolves from the project or from the global npm root (`npm i -g playwright && npx playwright install chromium`).
+
+The mark is `>•<`: two chevrons squeezing a dot, for traffic pinched through a local proxy and made smaller. The tray
+uses it flat in the health colour (same values as `--ok`, `--degraded`, `--down`, `--unknown` in `styles.css`);
+the app icon puts it on a dark rounded tile. The animated variant closes the chevrons in and shrinks the dot over
+1.2 s: `icon-src/*-animated.svg` animate with SMIL, and the tray plays the same motion from eight `tray/busy-N.png`
+frames (blue) while a service action runs. Below 48 px the app icon drops its sheen and draws the mark larger.

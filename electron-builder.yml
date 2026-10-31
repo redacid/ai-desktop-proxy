@@ -10,5 +10,5 @@ extraResources:
 linux:
   target: [AppImage, deb]
   category: Development
-  icon: resources/icon.png
+  icon: resources/icons
   maintainer: Serhii <sr@ios.in.ua>

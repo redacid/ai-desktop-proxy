@@ -139,6 +139,7 @@ async function withPortCheck(step: () => Promise<string | null>, retry = step): 
 async function exclusive(fn: () => Promise<string | null>): Promise<ActionResult> {
   if (busy) return { ok: false, error: 'another action is still running', status: monitor.current }
   busy = true
+  tray?.setBusy(true)
   try {
     const error = await fn()
     const status = await monitor.refresh()
@@ -147,6 +148,7 @@ async function exclusive(fn: () => Promise<string | null>): Promise<ActionResult
     return { ok: false, error: (err as Error).message, status: await monitor.refresh() }
   } finally {
     busy = false
+    tray?.setBusy(false)
   }
 }
 

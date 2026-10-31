@@ -24,6 +24,9 @@ The dot next to the title and the tray icon colour show the overall state:
 | red | the proxy is down |
 | grey | not checked yet |
 
+While the app installs, starts or stops a service, the tray icon turns blue and pulses (the chevrons squeeze the
+dot) until the action finishes.
+
 The window polls every 5 s while it is visible and every 30 s while it sits in the tray. **Check now** forces a
 check.
 

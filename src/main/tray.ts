@@ -9,8 +9,12 @@ const labels: Record<Health, string> = {
   unknown: 'Unknown'
 }
 
-function icon(health: Health): Electron.NativeImage {
-  return nativeImage.createFromPath(resourcePath(`tray-${health}.png`))
+const BUSY_FRAMES = 8
+const BUSY_FRAME_MS = 150
+
+// nativeImage loads the matching @2x file next to each PNG on HiDPI screens.
+function icon(name: string): Electron.NativeImage {
+  return nativeImage.createFromPath(resourcePath('tray', `${name}.png`))
 }
 
 export interface TrayActions {
@@ -25,6 +29,9 @@ export interface TrayActions {
 export class AppTray {
   private tray: Tray
   private lastKey = ''
+  private health: Health = 'unknown'
+  private busyTimer: NodeJS.Timeout | null = null
+  private busyFrames: Electron.NativeImage[] = []
 
   constructor(private actions: TrayActions) {
     this.tray = new Tray(icon('unknown'))
@@ -43,7 +50,8 @@ export class AppTray {
     if (key === this.lastKey) return
     this.lastKey = key
 
-    this.tray.setImage(icon(health))
+    this.health = health
+    if (!this.busyTimer) this.tray.setImage(icon(health))
     this.tray.setToolTip(`Claude Desktop Proxy: ${labels[health]}`)
     this.tray.setContextMenu(
       Menu.buildFromTemplate([
@@ -68,7 +76,28 @@ export class AppTray {
     )
   }
 
+  /** Plays the squeeze animation while a service action runs; back to the health icon after. */
+  setBusy(busy: boolean): void {
+    if (busy === !!this.busyTimer) return
+    if (busy) {
+      if (!this.busyFrames.length) {
+        this.busyFrames = Array.from({ length: BUSY_FRAMES }, (_, i) => icon(`busy-${i}`))
+      }
+      let frame = 0
+      this.tray.setImage(this.busyFrames[0])
+      this.busyTimer = setInterval(() => {
+        frame = (frame + 1) % BUSY_FRAMES
+        this.tray.setImage(this.busyFrames[frame])
+      }, BUSY_FRAME_MS)
+    } else {
+      clearInterval(this.busyTimer!)
+      this.busyTimer = null
+      this.tray.setImage(icon(this.health))
+    }
+  }
+
   destroy(): void {
+    this.setBusy(false)
     this.tray.destroy()
   }
 }

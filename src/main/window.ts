@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { BrowserWindow, shell } from 'electron'
+import { resourcePath } from './paths'
 
 export function createMainWindow(isQuitting: () => boolean): BrowserWindow {
   const win = new BrowserWindow({
@@ -10,6 +11,7 @@ export function createMainWindow(isQuitting: () => boolean): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     title: 'Claude Desktop Proxy',
+    icon: resourcePath('icon.png'), // taskbar/alt-tab; packaged builds also get it from the .desktop entry
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

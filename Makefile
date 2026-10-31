@@ -6,7 +6,7 @@ STAMP    := node_modules/.install-stamp
 ELECTRON := node_modules/electron/path.txt
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev build run run-hidden typecheck test test-addon test-legacy lint check dist dist-appimage dist-deb clean distclean
+.PHONY: icons help install dev build run run-hidden typecheck test test-addon test-legacy lint check dist dist-appimage dist-deb clean distclean
 
 help: ## Show this list
 	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  \033[36m%-14s\033[0m %s\n",$$1,$$2}'
@@ -58,6 +58,9 @@ dist-appimage: build $(ELECTRON) ## Package only the AppImage
 
 dist-deb: build $(ELECTRON) ## Package only the deb
 	$(NODE_BIN)/electron-builder --linux deb
+
+icons: ## Regenerate app and tray icons from scripts/icons.mjs (needs Playwright's Chromium)
+	node scripts/icons.mjs
 
 clean: ## Remove build output (out/, dist/)
 	rm -rf out dist
