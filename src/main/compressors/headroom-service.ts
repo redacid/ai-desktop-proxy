@@ -49,7 +49,11 @@ export class HeadroomService {
     return renderUnit({
       description: 'headroom proxy (Claude Desktop Proxy)',
       exec: binary,
-      args: ['proxy', '--host', ep.host, '--port', String(ep.port)],
+      args: [
+        'proxy', '--host', ep.host, '--port', String(ep.port),
+        // Keeps request/response bodies in memory (loopback-only feed) so the app can show them.
+        ...(this.settings().headroomLogMessages ? ['--log-messages'] : [])
+      ],
       unsetEnv: PROXY_VARS
     })
   }

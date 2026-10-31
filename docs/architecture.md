@@ -10,7 +10,7 @@
 │   ClientManager ── ClaudeCodeAdapter ── ~/.claude/settings.json
 │   ProxyManager ─── systemctl --user ── claude-desktop-proxy.service ── mitmdump + cdp_addon.py
 │   HeadroomService ─ systemctl --user ── claude-desktop-proxy-headroom.service ── headroom proxy
-│   HeadroomBackend ─ HTTP /health, /stats-history
+│   HeadroomBackend ─ HTTP /health, /stats-history, /transformations/feed
 │   StatusMonitor, AppTray, AppStore, Autostart           │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -47,7 +47,7 @@ must never leave clients pointing at a dead proxy port, so the services outlive 
 | `proxy/systemd.ts` | Unit rendering with systemd-safe quoting; `systemctl --user` / `journalctl --user` wrapper |
 | `proxy/tools.ts` | Finding `uv` and uv-installed tools, port owner via `ss`, `PortTakenError` |
 | `proxy/exec.ts` | Shell-free command runner; streaming runner for installs (whole lines) |
-| `compressors/headroom.ts` | `HeadroomBackend`: `/health`, `/stats-history` parsing |
+| `compressors/headroom.ts` | `HeadroomBackend`: `/health`, `/stats-history` and `/transformations/feed` parsing (recent requests and their bodies) |
 | `compressors/headroom-service.ts` | `HeadroomService`: install/run headroom as a user service, external detection |
 | `status.ts` | `StatusMonitor` (polling, combined health) and the status-line functions for each card |
 | `store.ts` | `AppStore`: `state.json` with settings and per-client `{ enabled, applied }` |
@@ -71,6 +71,11 @@ it is defined there.
 | `proxy:logs`, `compressor:logs` | invoke | → last 80 journal lines |
 | `proxy:install-log` | main → renderer | one line of install output (both services) |
 | `settings:get`, `settings:save` | invoke | `UserSettings` → `ActionResult` |
+| `compressor:request-detail` | invoke | request id → `RequestDetail` (messages from the client, sent to the provider, response) |
+
+Recent requests travel with `AppStatus.stats.recent` as metrics only; bodies are fetched on demand through
+`compressor:request-detail`, because they can be large and are only kept when headroom runs with `--log-messages`.
+The renderer turns messages into readable text in `src/renderer/src/messages.ts` (pure, unit tested).
 
 ## Client state machine
 

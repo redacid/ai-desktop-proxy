@@ -108,3 +108,34 @@ button.link { border: none; background: none; color: var(--muted); text-decorati
 .settings label.check span { font-weight: normal; }
 .saved { color: var(--ok); font-size: 13px; align-self: center; }
 .error-inline { color: var(--down); font-size: 13px; align-self: center; white-space: pre-wrap; }
+.settings .hint { margin-top: -10px; padding-left: 26px; }
+code { font: 12px ui-monospace, monospace; }
+
+.recent { margin-top: 18px; }
+.recent h3, .msgs h3 { font-size: 14px; margin: 0 0 8px; }
+.recent h3 small, .msgs h3 small { font-weight: normal; color: var(--muted); font-size: 12px; }
+.table-wrap { overflow-x: auto; }
+.recent table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.recent th { text-align: left; font-weight: 600; color: var(--muted); padding: 4px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.recent td { padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.recent .num { text-align: right; white-space: nowrap; }
+.recent tr.req { cursor: pointer; }
+.recent tr.req:hover, .recent tr.req.open { background: var(--bg); }
+.recent .caret { color: var(--muted); display: inline-block; width: 10px; }
+.recent .saved-cell { color: var(--ok); }
+.recent .transforms { color: var(--muted); word-break: break-word; }
+.recent tr.req-expanded > td { background: var(--bg); padding: 10px; }
+.req-detail { display: grid; gap: 14px; }
+.msgs ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.msg { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; background: var(--card); }
+.msg.changed { border-color: var(--degraded); }
+.msg-head { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.msg-role { font-weight: 600; }
+.msg-kinds { color: var(--muted); flex: 1; }
+.msg-size { color: var(--muted); }
+.msg-head button.link { padding: 0 4px; font-size: 12px; }
+.msg-body {
+  margin: 6px 0 0; max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  font: 11px/1.45 ui-monospace, monospace;
+}
+.msg > button.link { font-size: 12px; padding: 2px 0; }

@@ -1,4 +1,4 @@
-import type { ComponentStatus, CompressorStats, SavingsTotals } from '@shared/ipc'
+import type { ComponentStatus, CompressorStats, RecentRequest, RequestDetail, SavingsTotals } from '@shared/ipc'
 
 type Json = Record<string, unknown>
 
@@ -29,7 +29,7 @@ function totals(o: Json | undefined): SavingsTotals {
  * to the few numbers the UI shows. Unknown or missing fields become 0 / null
  * rather than errors, so a headroom upgrade degrades the view instead of breaking it.
  */
-export function parseStatsHistory(raw: unknown): CompressorStats {
+export function parseStatsHistory(raw: unknown): Omit<CompressorStats, 'recent' | 'messagesLogged'> {
   const root = obj(raw)
   if (!root || !obj(root.lifetime)) throw new Error('not a headroom stats-history response')
   const session = obj(root.display_session)
@@ -51,11 +51,58 @@ export function parseStatsHistory(raw: unknown): CompressorStats {
   }
 }
 
+export interface Feed {
+  logged: boolean
+  items: RecentRequest[]
+  /** request id -> raw feed entry; only filled when bodies were requested */
+  raw: Map<string, Json>
+}
+
+/** Maps /transformations/feed (headroom 0.42) to RecentRequest, newest first. */
+export function parseFeed(raw: unknown): Feed {
+  const root = obj(raw)
+  if (!root || !Array.isArray(root.transformations)) throw new Error('not a headroom transformations feed')
+  const entries = (root.transformations as unknown[]).map(obj).filter((e): e is Json => !!e && typeof e.request_id === 'string')
+  const items = entries.map((e) => ({
+    id: e.request_id as string,
+    timestamp: str(e, 'timestamp'),
+    provider: str(e, 'provider'),
+    model: str(e, 'model'),
+    inputTokensOriginal: num(e, 'input_tokens_original'),
+    inputTokensOptimized: num(e, 'input_tokens_optimized'),
+    tokensSaved: num(e, 'tokens_saved'),
+    savingsPercent: num(e, 'savings_percent'),
+    transforms: Array.isArray(e.transforms_applied) ? e.transforms_applied.filter((t): t is string => typeof t === 'string') : [],
+    cacheReadTokens: num(e, 'cache_read_tokens'),
+    cacheWriteTokens: num(e, 'cache_write_tokens'),
+    uncachedInputTokens: num(e, 'uncached_input_tokens')
+  }))
+  items.sort((a, b) => (b.timestamp ?? '').localeCompare(a.timestamp ?? ''))
+  return { logged: root.log_full_messages === true, items, raw: new Map(entries.map((e) => [e.request_id as string, e])) }
+}
+
+/** Picks one request's bodies out of a feed fetched with messages. */
+export function detailFromFeed(feed: Feed, id: string): RequestDetail {
+  const e = feed.raw.get(id)
+  const list = (v: unknown): unknown[] | null => (Array.isArray(v) ? v : null)
+  if (!e) return { id, logged: feed.logged, found: false, original: null, compressed: null, response: null }
+  return {
+    id,
+    logged: feed.logged,
+    found: true,
+    original: list(e.request_messages),
+    compressed: list(e.compressed_messages),
+    response: typeof e.response_content === 'string' ? e.response_content : null
+  }
+}
+
 async function getJson(url: string, timeoutMs: number): Promise<unknown> {
   const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
+
+export const RECENT_LIMIT = 20
 
 /** headroom running as a local HTTP proxy (by Headroom Desktop or `headroom proxy`). */
 export class HeadroomBackend {
@@ -81,6 +128,21 @@ export class HeadroomBackend {
   }
 
   async stats(): Promise<CompressorStats> {
-    return parseStatsHistory(await getJson(`${this.baseUrl}/stats-history`, 5000))
+    const [history, feed] = await Promise.all([
+      getJson(`${this.baseUrl}/stats-history`, 5000),
+      // Numbers only: with bodies a full feed can be tens of MB.
+      this.feed(RECENT_LIMIT, false).catch(() => null)
+    ])
+    return { ...parseStatsHistory(history), recent: feed?.items ?? [], messagesLogged: feed ? feed.logged : null }
+  }
+
+  feed(limit: number, withMessages: boolean): Promise<Feed> {
+    const q = `limit=${limit}&include_messages=${withMessages ? 1 : 0}`
+    return getJson(`${this.baseUrl}/transformations/feed?${q}`, withMessages ? 20000 : 5000).then(parseFeed)
+  }
+
+  /** Bodies of one recent request. headroom has no per-id lookup, so this reads the recent window. */
+  async detail(id: string): Promise<RequestDetail> {
+    return detailFromFeed(await this.feed(RECENT_LIMIT, true), id)
   }
 }

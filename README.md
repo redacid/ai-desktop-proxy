@@ -45,5 +45,6 @@ running sessions keep their old environment.
 
 ## Status
 
-Done: Claude Code client, mitmproxy service with headroom fallback, headroom service and statistics, settings,
+Done: Claude Code client, mitmproxy service with headroom fallback, headroom service and statistics with
+expandable recent requests, settings,
 start at login. Not yet: verified AppImage/deb packages, Codex and Cursor clients, macOS.

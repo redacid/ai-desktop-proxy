@@ -9,6 +9,7 @@ const api: Api = {
   proxyLogs: () => ipcRenderer.invoke(IPC.proxyLogs),
   compressorAction: (action) => ipcRenderer.invoke(IPC.compressorAction, action),
   compressorLogs: () => ipcRenderer.invoke(IPC.compressorLogs),
+  requestDetail: (id) => ipcRenderer.invoke(IPC.requestDetail, id),
   getSettings: () => ipcRenderer.invoke(IPC.getSettings),
   saveSettings: (settings) => ipcRenderer.invoke(IPC.saveSettings, settings),
   onInstallLog: (listener) => {

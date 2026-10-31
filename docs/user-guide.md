@@ -76,6 +76,26 @@ Changes reach only **new** client sessions; running sessions keep the environmen
 Lifetime totals (tokens saved, money saved by compression and by cache, requests), the current headroom session,
 and tokens saved per day for the last 14 days, from headroom's `/stats-history`.
 
+### Recent requests
+
+Below the totals is a table of the last 20 requests headroom handled (from its `/transformations/feed`), newest
+first: time, model, input tokens before and after compression, tokens saved and percent, cache read / cache write /
+uncached input tokens, and the transforms headroom applied. headroom does not list requests that failed.
+
+Click a row to expand it. It shows three parts:
+
+- **From the client**: the messages as the client sent them.
+- **To the provider**: the messages headroom forwarded. Messages headroom rewrote are outlined and marked
+  *changed*. Each message shows its size in characters, so you can see where the savings came from.
+- **Response**: the text the provider returned.
+
+Long messages are cut to a preview with **Show all**; **JSON** shows the raw message.
+
+Message bodies exist only when headroom runs with `--log-messages`. For headroom run by this app, turn on
+**Keep request bodies** in Settings (the service restarts). For your own headroom, start it with `--log-messages`
+or `HEADROOM_LOG_MESSAGES=1`. Without it the table still shows the metrics. headroom keeps only its most recent
+requests in memory, so an older row may say it is no longer available.
+
 ## Keeping clients safe
 
 - The app re-checks client configs at start, whenever the config directory changes, and every check interval.
@@ -95,6 +115,7 @@ and tokens saved per day for the last 14 days, from headroom's `/stats-history`.
 | Check interval | 60 s | 10–3600 s |
 | Restore proxy settings | on | Auto-restore described above |
 | Start at login | off | Writes `~/.config/autostart/claude-desktop-proxy.desktop`, which starts the app hidden |
+| Keep request bodies | off | Adds `--log-messages` to headroom run by this app (restarts it) so recent requests can be expanded. headroom then keeps prompts, code and replies in memory and logs |
 
 ## Files the app touches
 

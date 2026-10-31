@@ -24,13 +24,13 @@ Linux, Node.js 22+, npm, Python 3 (addon tests). `make` with no target lists eve
 src/shared/ipc.ts       IPC contract and every type crossing it
 src/main/               main process (see docs/architecture.md)
 src/preload/            window.api over contextBridge
-src/renderer/           React UI (App.tsx, styles.css)
+src/renderer/           React UI (App.tsx, RecentRequests.tsx, messages.ts, styles.css)
 resources/              icons and the mitmproxy addon (shipped as extraResources)
   icon.png, icons/      app icon: 512 px and the NxN.png set electron-builder uses for Linux
   tray/                 tray icons per health (22 px + @2x, plus 16/24/32 sizes) and busy-N animation frames
   icon-src/             generated SVG sources, static and animated (SMIL)
 scripts/icons.mjs       icon generator
-examples/               sample headroom /stats-history response used by tests
+examples/               sample headroom /stats-history and /transformations/feed responses used by tests
 legacy/                 original cdp.sh + settings_env.py, reference only
 docs/                   user guide, architecture, this file
 ```
@@ -43,7 +43,8 @@ touch your real `~/.claude`, systemd or network:
 - `ClaudeCodeAdapter`: symlinks, file mode, Unicode, `NO_PROXY` merge, conflicts, broken JSON, port moves.
 - `ClientManager`: enable refused without proxy, auto-restore, failsafe, suspend/resume.
 - `ProxyManager`/`HeadroomService` pieces: unit rendering and quoting, outdated/legacy detection, port owner.
-- `parseStatsHistory` against `examples/headroom-stats.json`.
+- `parseStatsHistory` against `examples/headroom-stats.json`; `parseFeed`/`detailFromFeed` and the renderer's
+  `messages.ts` against `examples/headroom-feed.json`.
 
 ### End-to-end without systemd
 

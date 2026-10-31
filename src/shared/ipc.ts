@@ -38,11 +38,43 @@ export interface SavingsTotals {
   totalInputCostUsd: number
 }
 
+/** One request from headroom's /transformations/feed, without message bodies. */
+export interface RecentRequest {
+  id: string
+  timestamp: string | null
+  provider: string | null
+  model: string | null
+  inputTokensOriginal: number
+  inputTokensOptimized: number
+  tokensSaved: number
+  savingsPercent: number
+  transforms: string[]
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  uncachedInputTokens: number
+}
+
+/** Message bodies of one request: as the client sent it, as sent to the provider, and the reply. */
+export interface RequestDetail {
+  id: string
+  /** false when headroom runs without --log-messages, so bodies are not kept */
+  logged: boolean
+  /** null = request no longer in headroom's recent buffer */
+  found: boolean
+  original: unknown[] | null
+  compressed: unknown[] | null // null when headroom did not keep a separate compressed copy
+  response: string | null
+}
+
 export interface CompressorStats {
   lifetime: SavingsTotals
   session: (SavingsTotals & { startedAt: string | null; lastActivityAt: string | null }) | null
   daily: { day: string; tokensSaved: number; compressionSavingsUsd: number }[]
   generatedAt: string | null
+  /** Newest first. Empty when headroom has no feed endpoint. */
+  recent: RecentRequest[]
+  /** Whether headroom keeps message bodies (started with --log-messages). null = unknown. */
+  messagesLogged: boolean | null
 }
 
 export interface ProxyInfo {
@@ -76,6 +108,8 @@ export type CompressorAction = 'install' | 'setup' | 'start' | 'stop' | 'restart
 export interface UserSettings {
   proxyPort: number
   headroomUrl: string
+  /** Start our headroom service with --log-messages, so request bodies can be inspected. */
+  headroomLogMessages: boolean
   autoRepair: boolean
   checkIntervalSec: number
   autostart: boolean
@@ -112,6 +146,7 @@ export const IPC = {
   installLog: 'proxy:install-log',
   compressorAction: 'compressor:action',
   compressorLogs: 'compressor:logs',
+  requestDetail: 'compressor:request-detail',
   getSettings: 'settings:get',
   saveSettings: 'settings:save'
 } as const
@@ -124,6 +159,7 @@ export interface Api {
   proxyLogs(): Promise<string>
   compressorAction(action: CompressorAction): Promise<ActionResult>
   compressorLogs(): Promise<string>
+  requestDetail(id: string): Promise<RequestDetail>
   getSettings(): Promise<UserSettings>
   saveSettings(settings: UserSettings): Promise<ActionResult>
   onStatus(listener: (status: AppStatus) => void): () => void

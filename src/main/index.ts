@@ -267,8 +267,8 @@ const compressorAction = (action: CompressorAction): Promise<ActionResult> =>
   )
 
 async function getSettings(): Promise<UserSettings> {
-  const { proxyPort, headroomUrl, autoRepair, checkIntervalSec } = store.settings
-  return { proxyPort, headroomUrl, autoRepair, checkIntervalSec, autostart: await autostart.isEnabled() }
+  const { proxyPort, headroomUrl, headroomLogMessages, autoRepair, checkIntervalSec } = store.settings
+  return { proxyPort, headroomUrl, headroomLogMessages, autoRepair, checkIntervalSec, autostart: await autostart.isEnabled() }
 }
 
 /**
@@ -286,13 +286,15 @@ const saveSettings = (input: UserSettings): Promise<ActionResult> =>
     await store.update({
       proxyPort: next.proxyPort,
       headroomUrl: next.headroomUrl,
+      headroomLogMessages: next.headroomLogMessages,
       autoRepair: next.autoRepair,
       checkIntervalSec: next.checkIntervalSec
     })
     await autostart.set(next.autostart)
 
     const urlChanged = before.headroomUrl !== next.headroomUrl
-    if (urlChanged && headroomInfo.unit !== 'missing') {
+    const headroomArgsChanged = urlChanged || before.headroomLogMessages !== next.headroomLogMessages
+    if (headroomArgsChanged && headroomInfo.unit !== 'missing') {
       if (localEndpoint(next.headroomUrl)) {
         const err = await withPortCheck(async () => (await headroomService.setup(), null))
         if (err) return `settings saved, but headroom did not move: ${err}`
@@ -328,6 +330,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle(IPC.proxyLogs, () => proxy.logs(80))
     ipcMain.handle(IPC.compressorAction, (_e, action: CompressorAction) => compressorAction(action))
     ipcMain.handle(IPC.compressorLogs, () => headroomService.logs(80))
+    ipcMain.handle(IPC.requestDetail, (_e, id: string) => headroom().detail(id))
     ipcMain.handle(IPC.getSettings, () => getSettings())
     ipcMain.handle(IPC.saveSettings, (_e, s: UserSettings) => saveSettings(s))
 

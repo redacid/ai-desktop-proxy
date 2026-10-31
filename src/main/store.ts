@@ -12,6 +12,8 @@ export interface Settings {
   proxyPort: number
   caFile: string
   headroomUrl: string
+  /** Pass --log-messages to the headroom service we run (keeps request bodies for inspection). */
+  headroomLogMessages: boolean
   /** Re-apply our settings when they disappear from a config we manage. */
   autoRepair: boolean
   checkIntervalSec: number
@@ -22,6 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
   proxyPort: DEFAULT_PORT,
   caFile: DEFAULT_CA_FILE,
   headroomUrl: 'http://127.0.0.1:6767',
+  headroomLogMessages: false,
   autoRepair: true,
   checkIntervalSec: 60,
   clients: {}
