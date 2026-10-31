@@ -15,6 +15,17 @@ On GNOME the tray icon needs the AppIndicator extension.
 
 ## The window
 
+The window has four tabs:
+
+| Tab | What it holds |
+|---|---|
+| Overview | Proxy, Compressor and Clients cards; its dot repeats the overall state |
+| Savings | headroom savings and recent requests |
+| Tools | Tools & updates: headroom, RTK, Ponytail, Chisle, Serena, MarkItDown |
+| Settings | App and headroom settings |
+
+Errors and the Install log stay visible on every tab, and a running tool action keeps going when you switch tabs.
+
 The dot next to the title and the tray icon colour show the overall state:
 
 | Colour | Meaning |

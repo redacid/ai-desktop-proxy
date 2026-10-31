@@ -28,7 +28,11 @@ body {
 }
 main { padding: 24px; }
 .loading { color: var(--muted); }
-.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; overflow-x: auto; }
+.tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); padding: 8px 14px; display: flex; align-items: center; gap: 6px; }
+.tabs button.active { color: var(--text); border-bottom-color: var(--text); font-weight: 600; }
+.tabs .dot { width: 8px; height: 8px; }
 h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 10px; }
 h2 { font-size: 15px; margin: 0; }
 button {
@@ -72,7 +76,7 @@ footer { margin-top: 20px; color: var(--muted); font-size: 12px; }
 .switch input:checked + span { background: var(--ok); }
 .switch input:checked + span::after { transform: translateX(14px); }
 .switch input:disabled + span { opacity: .5; cursor: default; }
-.stats { margin-top: 16px; }
+.stats { margin-top: 0; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 12px 0; }
 .tiles div { display: flex; flex-direction: column; }
 .tiles .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -156,7 +160,7 @@ code { font: 12px ui-monospace, monospace; }
 .settings select, .settings input[type="number"] { justify-self: start; width: 100%; }
 /* Optional client integrations do not change proxy health. */
 .tool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-.tools { margin-top: 16px; }
+.tools { margin-top: 0; }
 .tools > header { justify-content: space-between; }
 .tools > .detail { margin: 8px 0 14px; }
 .tool { min-width: 0; border: 1px solid var(--border, #333); border-radius: 8px; padding: 14px; }

@@ -130,8 +130,7 @@ function ServiceControls({ buttons, showLogs, loadLogs, busy, onAction, note }: 
   )
 }
 
-function SettingsPanel({ onClose, onSaved, headroomExternal }: {
-  onClose: () => void
+function SettingsPanel({ onSaved, headroomExternal }: {
   onSaved: (s: AppStatus) => void
   headroomExternal: boolean
 }): React.JSX.Element {
@@ -164,7 +163,6 @@ function SettingsPanel({ onClose, onSaved, headroomExternal }: {
     <form className="card settings" onSubmit={(e) => void save(e)}>
       <header>
         <h2>Settings</h2>
-        <button type="button" className="link" onClick={onClose}>Close</button>
       </header>
       <label>
         <span>Proxy port</span>
@@ -259,12 +257,15 @@ function Stats({ stats }: { stats: CompressorStats }): React.JSX.Element {
   )
 }
 
+type Tab = 'overview' | 'savings' | 'tools' | 'settings'
+const TABS: [Tab, string][] = [['overview', 'Overview'], ['savings', 'Savings'], ['tools', 'Tools'], ['settings', 'Settings']]
+
 export function App(): React.JSX.Element {
   const [status, setStatus] = useState<AppStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busyAction, setBusyAction] = useState<{ target: 'proxy' | 'compressor'; action: Action } | null>(null)
-  const [showSettings, setShowSettings] = useState(false)
+  const [tab, setTab] = useState<Tab>('overview')
   const [installLog, setInstallLog] = useState<string[]>([])
   const [toolBusy, setToolBusy] = useState(false)
 
@@ -314,24 +315,27 @@ export function App(): React.JSX.Element {
           <span className={`dot ${status.overall}`} /> Claude Desktop Proxy
         </h1>
         <div className="top-actions">
-          <button onClick={() => setShowSettings(!showSettings)}>Settings</button>
           <button onClick={() => void window.api.refreshStatus().then(setStatus)}>Check now</button>
         </div>
       </header>
+      <nav className="tabs" role="tablist">
+        {TABS.map(([id, label]) => (
+          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
+            {label}
+            {id === 'overview' && <span className={`dot ${status.overall}`} />}
+          </button>
+        ))}
+      </nav>
       {error && (
         <div className="error" role="alert">
           <span className="error-text">{error}</span>
           <button onClick={() => setError(null)} aria-label="Dismiss">×</button>
         </div>
       )}
-      {showSettings && (
-        <SettingsPanel
-          onClose={() => setShowSettings(false)}
-          onSaved={setStatus}
-          headroomExternal={status.compressorInfo?.managed === 'external'}
-        />
+      {tab === 'settings' && (
+        <SettingsPanel onSaved={setStatus} headroomExternal={status.compressorInfo?.managed === 'external'} />
       )}
-      <div className="grid">
+      {tab === 'overview' && <div className="grid">
         <Card title="Proxy (mitmproxy)" status={status.proxy}>
           {status.proxyInfo && (
             <ServiceControls
@@ -364,8 +368,11 @@ export function App(): React.JSX.Element {
             ))}
           </ul>
         </Card>
+      </div>}
+      {/* Kept mounted so a running tool action and its state survive switching tabs. */}
+      <div hidden={tab !== 'tools'}>
+        <Tools disabled={busy || toolBusy || busyAction !== null} onBusy={setToolBusy} onLogStart={() => { setInstallLog([]) }} />
       </div>
-      <Tools disabled={busy || toolBusy || busyAction !== null} onBusy={setToolBusy} onLogStart={() => setInstallLog([])} />
       {installLog.length > 0 && (
         <section className="card install">
           <header>
@@ -375,7 +382,9 @@ export function App(): React.JSX.Element {
           <LiveLog lines={installLog} />
         </section>
       )}
-      {status.stats && <Stats stats={status.stats} />}
+      {tab === 'savings' && (status.stats
+        ? <Stats stats={status.stats} />
+        : <p className="detail">No headroom statistics yet: headroom is not answering at the configured URL.</p>)}
       <footer>
         Last check: {status.checkedAt ? new Date(status.checkedAt).toLocaleTimeString() : 'never'}
       </footer>
