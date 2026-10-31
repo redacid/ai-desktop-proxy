@@ -2,7 +2,7 @@ import { watch, type FSWatcher } from 'node:fs'
 import { EventEmitter } from 'node:events'
 import type { ClientInfo } from '@shared/ipc'
 import { buildProxyEnv, isPortListening, type ProxyEnv } from '../proxy-env'
-import type { AppStore } from '../store'
+import type { AppStore, ClientPrefs } from '../store'
 import { exists } from '../fsutil'
 import { ClientConflictError, type ClientAdapter } from './types'
 
@@ -49,17 +49,23 @@ export class ClientManager extends EventEmitter {
   private async clientProblem(adapter: ClientAdapter): Promise<string | null> {
     const problem = await this.proxyProblem()
     if (problem || !adapter.plaintextPort) return problem
-    const port = adapter.plaintextPort(this.env())
+    return this.leakProblem(adapter, adapter.plaintextPort(this.env()))
+  }
+
+  private async leakProblem(adapter: ClientAdapter, port: number): Promise<string | null> {
     return (await this.portOurs(port))
       ? null
       : `127.0.0.1:${port} is not held by our proxy service, and ${adapter.name} would send its credentials there unencrypted`
   }
 
-  /** Like clientProblem, but only once it persists past a short wait (not just a restart). */
-  private async clientProblemConfirmed(adapter: ClientAdapter): Promise<string | null> {
-    if (!(await this.clientProblem(adapter))) return null
-    await new Promise((r) => setTimeout(r, this.confirmDownMs))
-    return this.clientProblem(adapter)
+  /**
+   * The plaintext port the client's config points at now: the one we last wrote,
+   * which differs from the settings while a port change is being repaired.
+   */
+  private configuredPort(adapter: ClientAdapter, prefs: ClientPrefs): number | null {
+    if (!adapter.plaintextPort) return null
+    const port = prefs.applied ? Number(new URL(prefs.applied.proxyUrl).port) : NaN
+    return Number.isInteger(port) && port > 0 ? port : adapter.plaintextPort(this.env())
   }
 
   /** Why turning a client on now would break it, or null when it is safe. */
@@ -154,18 +160,22 @@ export class ClientManager extends EventEmitter {
       let { state, detail } = await adapter.inspect(env, prefs.applied)
       let suspended = false
 
-      if (prefs.enabled && state === 'applied') {
-        down ??= await this.proxyDownConfirmed()
-        const problem = down ?? (adapter.plaintextPort ? await this.clientProblemConfirmed(adapter) : null)
+      // A plaintext client is pulled at once, without waiting out a restart: any
+      // moment its port is not ours, someone else may be reading its credentials.
+      const port = this.configuredPort(adapter, prefs)
+      const leak = port !== null && (state === 'applied' || state === 'partial') ? await this.leakProblem(adapter, port) : null
+      if (prefs.enabled && (leak || state === 'applied')) {
+        if (!leak) down ??= await this.proxyDownConfirmed()
+        const problem = leak ?? down
         if (problem) {
           try {
             await adapter.remove(prefs.applied, env)
             await this.store.updateClient(adapter.id, { applied: null })
             ;({ state } = await adapter.inspect(env, null))
-            detail = `${down ? 'proxy down' : 'unsafe'} (${problem}): settings removed until it is back`
+            detail = `${leak ? 'unsafe' : 'proxy down'} (${problem}): settings removed until it is back`
             suspended = true
           } catch (err) {
-            detail = `proxy down, could not remove settings: ${(err as Error).message}`
+            detail = `${leak ? 'unsafe' : 'proxy down'}, could not remove settings: ${(err as Error).message}`
           }
         }
       }

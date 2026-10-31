@@ -33,6 +33,7 @@ let tray: AppTray | null = null
 let quitting = false
 let busy = false // one service action at a time
 let wasListening: boolean | null = null
+let portsSeen: string | null = null
 
 const store = new AppStore(join(app.getPath('userData'), 'state.json'))
 const headroom = (): HeadroomBackend => new HeadroomBackend(store.settings.headroomUrl)
@@ -55,10 +56,15 @@ const monitor = new StatusMonitor({
   proxy: async (info) => {
     // When the proxy comes or goes, re-check clients now instead of on their timer.
     // Coming up (even when started outside the app) also ends a hold from Stop.
+    // So does a change of the Codex listener or of who holds the ports, so Codex is pulled at once.
+    const ports = `${info.listening}/${info.codexListening}/${info.ours}`
     if (wasListening !== null && wasListening !== info.listening) {
       void (info.listening ? clients.resume() : clients.checkNow())
+    } else if (portsSeen !== null && portsSeen !== ports) {
+      void clients.checkNow()
     }
     wasListening = info.listening
+    portsSeen = ports
     return proxyStatus(info)
   },
   compressorInfo: () => headroomService.info(),
@@ -309,6 +315,8 @@ const saveSettings = (input: UserSettings): Promise<ActionResult> =>
       }
     }
     const portsChanged = before.proxyPort !== next.proxyPort || before.codexPort !== next.codexPort
+    // No client may point at a port the proxy is leaving; resume() below re-points them.
+    if (portsChanged && proxyInfo.unit !== 'missing') await clients.suspendAll()
     if ((urlChanged || portsChanged) && proxyInfo.unit !== 'missing') {
       const err = await withPortCheck(async () => (await proxy.setup(), null))
       if (err) return `settings saved, but the proxy did not restart: ${err}`

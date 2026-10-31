@@ -119,14 +119,19 @@ describe('ClientManager', () => {
   describe('Codex (plaintext port)', () => {
     let codexConfig: string
     let ours: boolean
+    let ownedPorts: number[] | null // null = every port is ours unless `ours` is false
+    // A long confirmation: pulling Codex from a foreign port must not wait for it.
     const codexManager = (): ClientManager =>
-      new ClientManager([new CodexAdapter(codexConfig)], store, async () => proxyUp, async () => true, 0, async () => ours)
+      new ClientManager([new CodexAdapter(codexConfig)], store, async () => proxyUp, async () => true, 60_000, async (port) =>
+        ownedPorts ? ownedPorts.includes(port) : ours
+      )
     const config = (): Promise<string> => fs.readFile(codexConfig, 'utf8')
 
     beforeEach(async () => {
       codexConfig = join(dir, 'config.toml')
       await fs.writeFile(codexConfig, 'model = "x"\n')
       ours = true
+      ownedPorts = null
     })
 
     it('refuses to enable while our service does not hold the port', async () => {
@@ -148,6 +153,16 @@ describe('ClientManager', () => {
       ours = true
       await m.checkNow()
       expect(await config()).toContain('openai_base_url')
+    })
+
+    it('pulls a stale port of ours that someone else now holds, even with auto-restore off', async () => {
+      const m = codexManager()
+      expect(await m.setEnabled('codex', true)).toBeNull()
+      store.settings.autoRepair = false
+      store.settings.codexPort = 9999 // the config still says 8878
+      ownedPorts = [9999]
+      await m.checkNow()
+      expect(await config()).toBe('model = "x"\n')
     })
   })
 })

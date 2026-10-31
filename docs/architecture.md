@@ -57,8 +57,12 @@ port>/v1`. Codex talks plain HTTP and WebSocket to it, so no certificate is invo
 4. Codex sends its API key or ChatGPT token to the reverse listener in plain HTTP. Any local user could bind that
    port while our service is not on it, so the adapter declares it as `plaintextPort()`, and `ClientManager` lets
    Codex point there only while `ProxyManager.ownsPort` sees our service's main PID listening on it. `ss` cannot
-   see other users' processes, so an unidentified owner counts as not ours. When ownership is lost for more than
-   the 5 s confirmation, the base URL is removed like in the failsafe below.
+   see other users' processes, so an unidentified owner counts as not ours. The port checked is the one the config
+   points at (the last `AppliedRecord`), not only the one in settings. When it is not ours, the base URL is
+   removed in that check, without the failsafe's 5 s wait and whether or not auto-restore is on. The status
+   monitor re-checks clients whenever the listeners or their owner change, so this follows within one poll
+   (5 s with the window open, 30 s in the tray). Changing a port in Settings suspends all clients before the
+   proxy moves and resumes them after.
 
 ## Main-process modules
 
