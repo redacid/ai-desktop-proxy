@@ -1,9 +1,7 @@
 import { EventEmitter } from 'node:events'
-import type { AppStatus, ComponentStatus, Health } from '@shared/ipc'
+import type { AppStatus, ClientInfo, ComponentStatus, CompressorStats, Health } from '@shared/ipc'
 
-const unknown: ComponentStatus = { health: 'unknown', detail: 'not checked yet' }
-
-/** Combines component health: any down -> down, any degraded/unknown -> degraded, else ok. */
+/** Combines component health: any down -> down, all ok -> ok, all unknown -> unknown, else degraded. */
 export function overallHealth(parts: Health[]): Health {
   if (parts.includes('down')) return 'down'
   if (parts.every((p) => p === 'ok')) return 'ok'
@@ -11,33 +9,69 @@ export function overallHealth(parts: Health[]): Health {
   return 'degraded'
 }
 
-/**
- * Polls the proxy, the compressor and the client configs. Stage 1 has no real
- * checks yet; ProxyManager, CompressorBackend and ClientAdapter plug in here.
- */
+/** One line for the Clients card: problems with enabled clients first. */
+export function clientsStatus(list: ClientInfo[]): ComponentStatus {
+  const enabled = list.filter((c) => c.enabled)
+  if (!enabled.length) return { health: 'ok', detail: 'no client is routed through the proxy' }
+  const broken = enabled.filter((c) => c.state !== 'applied')
+  if (broken.length) {
+    return { health: 'degraded', detail: broken.map((c) => `${c.name}: ${c.state}`).join(', ') }
+  }
+  return { health: 'ok', detail: `routed: ${enabled.map((c) => c.name).join(', ')}` }
+}
+
+export interface StatusSources {
+  proxy(): Promise<ComponentStatus>
+  compressor(): Promise<ComponentStatus>
+  stats(): Promise<CompressorStats>
+  clients(): Promise<ClientInfo[]>
+}
+
+const unknown: ComponentStatus = { health: 'unknown', detail: 'not checked yet' }
+
+/** Polls every component and emits 'change' with the combined status. */
 export class StatusMonitor extends EventEmitter {
   private status: AppStatus = {
     overall: 'unknown',
     proxy: unknown,
     compressor: unknown,
     clients: unknown,
+    clientList: [],
+    stats: null,
     checkedAt: null
   }
   private timer: NodeJS.Timeout | null = null
+
+  constructor(private readonly sources: StatusSources) {
+    super()
+  }
 
   get current(): AppStatus {
     return this.status
   }
 
   async refresh(): Promise<AppStatus> {
-    const proxy: ComponentStatus = { health: 'unknown', detail: 'ProxyManager: stage 3' }
-    const compressor: ComponentStatus = { health: 'unknown', detail: 'headroom: stage 4' }
-    const clients: ComponentStatus = { health: 'unknown', detail: 'Claude Code: stage 2' }
+    const [proxy, compressor, clientList] = await Promise.all([
+      this.sources.proxy(),
+      this.sources.compressor(),
+      this.sources.clients()
+    ])
+    let stats = this.status.stats // keep the last numbers if headroom blips
+    if (compressor.health === 'ok') {
+      try {
+        stats = await this.sources.stats()
+      } catch {
+        // stats are optional; health already says headroom answers
+      }
+    }
+    const clients = clientsStatus(clientList)
     this.status = {
       overall: overallHealth([proxy.health, compressor.health, clients.health]),
       proxy,
       compressor,
       clients,
+      clientList,
+      stats,
       checkedAt: new Date().toISOString()
     }
     this.emit('change', this.status)

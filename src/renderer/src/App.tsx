@@ -1,7 +1,24 @@
 import { useEffect, useState } from 'react'
-import type { AppStatus, ComponentStatus } from '@shared/ipc'
+import type { AppStatus, ClientInfo, ComponentStatus, CompressorStats } from '@shared/ipc'
 
-function Card({ title, status }: { title: string; status: ComponentStatus }): React.JSX.Element {
+const int = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 })
+const usd = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
+const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 })
+
+const stateLabel: Record<ClientInfo['state'], string> = {
+  applied: 'routed',
+  absent: 'direct',
+  partial: 'partly set',
+  conflict: 'conflict',
+  missing: 'not installed',
+  error: 'error'
+}
+
+function Card({ title, status, children }: {
+  title: string
+  status: ComponentStatus
+  children?: React.ReactNode
+}): React.JSX.Element {
   return (
     <section className="card">
       <header>
@@ -10,17 +27,105 @@ function Card({ title, status }: { title: string; status: ComponentStatus }): Re
       </header>
       <p className="health">{status.health}</p>
       <p className="detail">{status.detail}</p>
+      {children}
+    </section>
+  )
+}
+
+function Client({ client, busy, onToggle }: {
+  client: ClientInfo
+  busy: boolean
+  onToggle: (enabled: boolean) => void
+}): React.JSX.Element {
+  const ok = !client.enabled || client.state === 'applied'
+  return (
+    <li className="client">
+      <div className="client-main">
+        <strong>{client.name}</strong>
+        <span className={`badge ${ok ? '' : 'warn'}`}>{stateLabel[client.state]}</span>
+        <label className="switch" title={client.enabled ? 'Stop routing' : 'Route through the proxy'}>
+          <input
+            type="checkbox"
+            checked={client.enabled}
+            disabled={busy || client.state === 'missing'}
+            onChange={(e) => onToggle(e.target.checked)}
+          />
+          <span />
+        </label>
+      </div>
+      <p className="detail">{client.detail}</p>
+      <p className="path">{client.configPath}</p>
+    </li>
+  )
+}
+
+function Stats({ stats }: { stats: CompressorStats }): React.JSX.Element {
+  const { lifetime, session } = stats
+  const days = stats.daily.slice(-14)
+  const max = Math.max(1, ...days.map((d) => d.tokensSaved))
+  return (
+    <section className="card stats">
+      <header>
+        <h2>headroom savings</h2>
+      </header>
+      <div className="tiles">
+        <div>
+          <span className="value">{compact.format(lifetime.tokensSaved)}</span>
+          <span className="label">tokens saved</span>
+        </div>
+        <div>
+          <span className="value">{usd.format(lifetime.compressionSavingsUsd)}</span>
+          <span className="label">saved by compression</span>
+        </div>
+        <div>
+          <span className="value">{usd.format(lifetime.cacheSavingsUsd)}</span>
+          <span className="label">saved by cache</span>
+        </div>
+        <div>
+          <span className="value">{int.format(lifetime.requests)}</span>
+          <span className="label">requests</span>
+        </div>
+      </div>
+      {session && (
+        <p className="detail">
+          Current session: {int.format(session.requests)} requests, {compact.format(session.tokensSaved)} tokens saved
+        </p>
+      )}
+      {days.length > 0 && (
+        <div className="bars" aria-label="Tokens saved per day">
+          {days.map((d) => (
+            <div key={d.day} className="bar" title={`${d.day}: ${int.format(d.tokensSaved)} tokens`}>
+              <span style={{ height: `${(d.tokensSaved / max) * 100}%` }} />
+              <small>{d.day.slice(8)}</small>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   )
 }
 
 export function App(): React.JSX.Element {
   const [status, setStatus] = useState<AppStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     void window.api.getStatus().then(setStatus)
     return window.api.onStatus(setStatus)
   }, [])
+
+  async function toggle(id: string, enabled: boolean): Promise<void> {
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await window.api.setClientEnabled(id, enabled)
+      setStatus(result.status)
+      if (!result.ok) setError(result.error ?? 'failed')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   if (!status) return <main className="loading">Loading…</main>
 
@@ -32,11 +137,24 @@ export function App(): React.JSX.Element {
         </h1>
         <button onClick={() => void window.api.refreshStatus().then(setStatus)}>Check now</button>
       </header>
+      {error && (
+        <div className="error" role="alert">
+          {error}
+          <button onClick={() => setError(null)} aria-label="Dismiss">×</button>
+        </div>
+      )}
       <div className="grid">
         <Card title="Proxy (mitmproxy)" status={status.proxy} />
         <Card title="Compressor (headroom)" status={status.compressor} />
-        <Card title="Clients" status={status.clients} />
+        <Card title="Clients" status={status.clients}>
+          <ul className="clients">
+            {status.clientList.map((c) => (
+              <Client key={c.id} client={c} busy={busy} onToggle={(on) => void toggle(c.id, on)} />
+            ))}
+          </ul>
+        </Card>
       </div>
+      {status.stats && <Stats stats={status.stats} />}
       <footer>
         Last check: {status.checkedAt ? new Date(status.checkedAt).toLocaleTimeString() : 'never'}
       </footer>

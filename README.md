@@ -14,8 +14,16 @@ The original shell version lives in [`legacy/`](legacy/).
 
 ## Status
 
-Stage 1 of the plan: window, tray (closing the window hides it), typed IPC, status polling skeleton.
-Next: Claude Code adapter + config watcher, mitmproxy manager, headroom backend and stats.
+- Window + tray (closing the window hides it; `--hidden` starts in the tray), typed IPC.
+- Claude Code: the app writes `HTTPS_PROXY`, `NODE_EXTRA_CA_CERTS` and `NO_PROXY` into `~/.claude/settings.json`
+  and removes exactly what it wrote. It re-checks the file at start, on every change and every 60 s, and restores
+  settings that disappeared while the proxy is up. Foreign values are reported as a conflict, never overwritten.
+  Turning a client on is refused while nothing listens on the proxy port.
+- headroom: health and savings from `/stats-history` (sample in `examples/headroom-stats.json`).
+- Not yet: starting/installing mitmproxy and headroom (use `legacy/cdp.sh install` for the proxy for now).
+
+App state lives in `~/.config/claude-desktop-proxy/state.json`; the first edit of a client config keeps a backup
+next to it (`settings.json.bak-claude-desktop-proxy`).
 
 ## Development
 
