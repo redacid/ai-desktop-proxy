@@ -12,6 +12,7 @@ import { ClaudeCodeAdapter } from './clients/claude-code'
 import { ClientManager } from './clients/manager'
 import { HeadroomBackend } from './compressors/headroom'
 import { HEADROOM_PACKAGE, HEADROOM_PYTHON, HeadroomService, localEndpoint } from './compressors/headroom-service'
+import { headroomArgs, headroomEnv, normalizeHeadroomOptions, validateHeadroomOptions } from './compressors/headroom-options'
 import { resourcePath } from './paths'
 import { defaultUnitFile, ProxyManager } from './proxy/manager'
 import { findUv, PortTakenError } from './proxy/tools'
@@ -267,8 +268,8 @@ const compressorAction = (action: CompressorAction): Promise<ActionResult> =>
   )
 
 async function getSettings(): Promise<UserSettings> {
-  const { proxyPort, headroomUrl, headroomLogMessages, autoRepair, checkIntervalSec } = store.settings
-  return { proxyPort, headroomUrl, headroomLogMessages, autoRepair, checkIntervalSec, autostart: await autostart.isEnabled() }
+  const { proxyPort, headroomUrl, headroom, autoRepair, checkIntervalSec } = store.settings
+  return { proxyPort, headroomUrl, headroom, autoRepair, checkIntervalSec, autostart: await autostart.isEnabled() }
 }
 
 /**
@@ -277,8 +278,8 @@ async function getSettings(): Promise<UserSettings> {
  */
 const saveSettings = (input: UserSettings): Promise<ActionResult> =>
   exclusive(async () => {
-    const next = { ...input, headroomUrl: normalizeUrl(input.headroomUrl) }
-    const invalid = validateSettings(next)
+    const next = { ...input, headroomUrl: normalizeUrl(input.headroomUrl), headroom: normalizeHeadroomOptions(input.headroom) }
+    const invalid = validateSettings(next) ?? validateHeadroomOptions(next.headroom)
     if (invalid) return invalid
 
     const before = { ...store.settings }
@@ -286,14 +287,15 @@ const saveSettings = (input: UserSettings): Promise<ActionResult> =>
     await store.update({
       proxyPort: next.proxyPort,
       headroomUrl: next.headroomUrl,
-      headroomLogMessages: next.headroomLogMessages,
+      headroom: next.headroom,
       autoRepair: next.autoRepair,
       checkIntervalSec: next.checkIntervalSec
     })
     await autostart.set(next.autostart)
 
     const urlChanged = before.headroomUrl !== next.headroomUrl
-    const headroomArgsChanged = urlChanged || before.headroomLogMessages !== next.headroomLogMessages
+    const unitArgs = (o: typeof next.headroom): string => JSON.stringify([headroomArgs(o), headroomEnv(o)])
+    const headroomArgsChanged = urlChanged || unitArgs(before.headroom) !== unitArgs(next.headroom)
     if (headroomArgsChanged && headroomInfo.unit !== 'missing') {
       if (localEndpoint(next.headroomUrl)) {
         const err = await withPortCheck(async () => (await headroomService.setup(), null))

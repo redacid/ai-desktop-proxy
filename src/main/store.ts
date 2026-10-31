@@ -1,5 +1,7 @@
 import { promises as fs } from 'node:fs'
+import type { HeadroomOptions } from '@shared/ipc'
 import type { AppliedRecord } from './clients/types'
+import { DEFAULT_HEADROOM_OPTIONS, normalizeHeadroomOptions } from './compressors/headroom-options'
 import { writeJsonAtomic } from './fsutil'
 import { DEFAULT_CA_FILE, DEFAULT_PORT } from './proxy-env'
 
@@ -12,8 +14,8 @@ export interface Settings {
   proxyPort: number
   caFile: string
   headroomUrl: string
-  /** Pass --log-messages to the headroom service we run (keeps request bodies for inspection). */
-  headroomLogMessages: boolean
+  /** Flags for the headroom service we run. */
+  headroom: HeadroomOptions
   /** Re-apply our settings when they disappear from a config we manage. */
   autoRepair: boolean
   checkIntervalSec: number
@@ -24,7 +26,7 @@ export const DEFAULT_SETTINGS: Settings = {
   proxyPort: DEFAULT_PORT,
   caFile: DEFAULT_CA_FILE,
   headroomUrl: 'http://127.0.0.1:6767',
-  headroomLogMessages: false,
+  headroom: DEFAULT_HEADROOM_OPTIONS,
   autoRepair: true,
   checkIntervalSec: 60,
   clients: {}
@@ -38,8 +40,12 @@ export class AppStore {
 
   async load(): Promise<Settings> {
     try {
-      const raw = JSON.parse(await fs.readFile(this.path, 'utf8')) as Partial<Settings>
-      this.data = { ...structuredClone(DEFAULT_SETTINGS), ...raw, clients: { ...(raw.clients ?? {}) } }
+      const raw = JSON.parse(await fs.readFile(this.path, 'utf8')) as Partial<Settings> & { headroomLogMessages?: boolean }
+      const { headroomLogMessages, ...rest } = raw
+      const headroom = normalizeHeadroomOptions(raw.headroom)
+      // 0.1 kept only this one flag at the top level
+      if (raw.headroom === undefined && typeof headroomLogMessages === 'boolean') headroom.logMessages = headroomLogMessages
+      this.data = { ...structuredClone(DEFAULT_SETTINGS), ...rest, headroom, clients: { ...(raw.clients ?? {}) } }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.error(`ignoring unreadable ${this.path}:`, err)

@@ -105,11 +105,56 @@ export interface CompressorInfo {
 
 export type CompressorAction = 'install' | 'setup' | 'start' | 'stop' | 'restart' | 'remove'
 
+/** Built-in headroom compressors that `--compressor` can select (headroom 0.42). */
+export const HEADROOM_COMPRESSORS = [
+  'smart_crusher', 'kompress', 'code_aware', 'search', 'log', 'tabular', 'config', 'html', 'image'
+] as const
+
+/**
+ * Options for the headroom service this app runs; each maps to a `headroom proxy` flag.
+ * Defaults equal headroom's own defaults, so a default value adds no flag.
+ */
+export interface HeadroomOptions {
+  /** false = --no-optimize (passthrough, only stats) */
+  optimize: boolean
+  /** cache = keep earlier turns stable for the provider's prompt cache; token = compress harder */
+  mode: 'cache' | 'token'
+  /** --target-ratio for text compression, 0.05–0.95; null = headroom decides */
+  targetRatio: number | null
+  /** retrieve = compressed parts can be fetched back by the model (CCR); lossless = --lossless; off = --no-ccr */
+  ccr: 'retrieve' | 'lossless' | 'off'
+  /** Tool names whose results are never lossy-compressed (--protect-tool-results), comma separated */
+  protectToolResults: string
+  /** Enabled compressors (--compressor); empty = all */
+  compressors: string[]
+  /** --code-aware (AST-based code compression) */
+  codeAware: boolean
+  /** false = --disable-kompress (no ML text compression, structural only) */
+  kompress: boolean
+  /** false = --no-cache (semantic cache) */
+  semanticCache: boolean
+  /** false = --no-rate-limit */
+  rateLimit: boolean
+  /** --rpm / --tpm; null = headroom default (60 rpm, unlimited tpm) */
+  rpm: number | null
+  tpm: number | null
+  /** --budget in USD per budgetPeriod; null = no budget */
+  budgetUsd: number | null
+  budgetPeriod: 'hourly' | 'daily' | 'monthly'
+  /** false = --no-http2 */
+  http2: boolean
+  /** headroom's anonymous upload of session summaries to Headroom Labs; false = HEADROOM_BEACON=off */
+  beacon: boolean
+  /** --log-messages: keep request bodies so recent requests can be inspected */
+  logMessages: boolean
+  /** More arguments, split like a shell would but never run through one */
+  extraArgs: string
+}
+
 export interface UserSettings {
   proxyPort: number
   headroomUrl: string
-  /** Start our headroom service with --log-messages, so request bodies can be inspected. */
-  headroomLogMessages: boolean
+  headroom: HeadroomOptions
   autoRepair: boolean
   checkIntervalSec: number
   autostart: boolean

@@ -139,3 +139,18 @@ code { font: 12px ui-monospace, monospace; }
   font: 11px/1.45 ui-monospace, monospace;
 }
 .msg > button.link { font-size: 12px; padding: 2px 0; }
+
+.hr-settings { border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px 14px; margin: 0; display: grid; gap: 12px; }
+.hr-settings legend { font-weight: 600; padding: 0 6px; }
+.hr-settings h3 { font-size: 13px; margin: 6px 0 -4px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.hr-settings .hint { margin-top: -8px; }
+.hr-settings .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.settings select, .settings input[type="text"] {
+  font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); max-width: 480px;
+}
+.settings input[type="number"]::placeholder, .settings input[type="text"]::placeholder { color: var(--muted); }
+.compressors { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; }
+.compressors > span { grid-column: 1 / -1; font-weight: 600; font-size: 13px; }
+.settings input:disabled + span, .settings select:disabled { opacity: .5; }
+.settings select, .settings input[type="number"] { justify-self: start; width: 100%; }

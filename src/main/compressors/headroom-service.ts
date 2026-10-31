@@ -5,6 +5,7 @@ import { run as defaultRun, runStreaming, type Runner } from '../proxy/exec'
 import { renderUnit, SystemdUser } from '../proxy/systemd'
 import { findUv, findUvTool, portOwner, PortTakenError, userUnitFile } from '../proxy/tools'
 import type { Settings } from '../store'
+import { headroomArgs, headroomEnv } from './headroom-options'
 
 export const HEADROOM_UNIT = 'claude-desktop-proxy-headroom.service'
 export const HEADROOM_PACKAGE = 'headroom-ai[all]'
@@ -51,9 +52,9 @@ export class HeadroomService {
       exec: binary,
       args: [
         'proxy', '--host', ep.host, '--port', String(ep.port),
-        // Keeps request/response bodies in memory (loopback-only feed) so the app can show them.
-        ...(this.settings().headroomLogMessages ? ['--log-messages'] : [])
+        ...headroomArgs(this.settings().headroom)
       ],
+      env: headroomEnv(this.settings().headroom),
       unsetEnv: PROXY_VARS
     })
   }

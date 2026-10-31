@@ -19,17 +19,20 @@ export interface UnitSpec {
   args: string[]
   /** Variables removed from the service environment (systemd's user manager may carry them). */
   unsetEnv?: string[]
+  /** Variables set for the service. */
+  env?: Record<string, string>
 }
 
 export function renderUnit(spec: UnitSpec): string {
   const execStart = [spec.exec, ...spec.args].map(quoteArg).join(' ')
+  const env = Object.entries(spec.env ?? {}).map(([k, v]) => `\nEnvironment=${quoteArg(`${k}=${v}`)}`).join('')
   return `# Managed by Claude Desktop Proxy; edits are overwritten.
 [Unit]
 Description=${spec.description}
 After=network-online.target
 
 [Service]
-ExecStart=${execStart}${spec.unsetEnv?.length ? `\nUnsetEnvironment=${spec.unsetEnv.join(' ')}` : ''}
+ExecStart=${execStart}${env}${spec.unsetEnv?.length ? `\nUnsetEnvironment=${spec.unsetEnv.join(' ')}` : ''}
 Restart=always
 RestartSec=2
 

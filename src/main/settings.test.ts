@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { desktopArg, desktopEntry } from './autostart'
+import { DEFAULT_HEADROOM_OPTIONS } from './compressors/headroom-options'
 import { normalizeUrl, validateSettings } from './settings'
 
-const good = { proxyPort: 8877, headroomUrl: 'http://127.0.0.1:6767', headroomLogMessages: false, autoRepair: true, checkIntervalSec: 60, autostart: false }
+const good = { proxyPort: 8877, headroomUrl: 'http://127.0.0.1:6767', headroom: DEFAULT_HEADROOM_OPTIONS, autoRepair: true, checkIntervalSec: 60, autostart: false }
 
 describe('validateSettings', () => {
   it('accepts the defaults', () => {

@@ -10,6 +10,7 @@ import type {
   ProxyInfo,
   UserSettings
 } from '@shared/ipc'
+import { HeadroomSettings } from './HeadroomSettings'
 import { RecentRequests } from './RecentRequests'
 
 const int = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 })
@@ -128,7 +129,11 @@ function ServiceControls({ buttons, showLogs, loadLogs, busy, onAction, note }: 
   )
 }
 
-function SettingsPanel({ onClose, onSaved }: { onClose: () => void; onSaved: (s: AppStatus) => void }): React.JSX.Element {
+function SettingsPanel({ onClose, onSaved, headroomExternal }: {
+  onClose: () => void
+  onSaved: (s: AppStatus) => void
+  headroomExternal: boolean
+}): React.JSX.Element {
   const [form, setForm] = useState<UserSettings | null>(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
@@ -183,14 +188,7 @@ function SettingsPanel({ onClose, onSaved }: { onClose: () => void; onSaved: (s:
         <input type="checkbox" checked={form.autostart} onChange={(e) => set('autostart', e.target.checked)} />
         <span>Start at login, hidden in the tray</span>
       </label>
-      <label className="check">
-        <input type="checkbox" checked={form.headroomLogMessages} onChange={(e) => set('headroomLogMessages', e.target.checked)} />
-        <span>Keep request bodies in headroom (<code>--log-messages</code>) to inspect recent requests</span>
-      </label>
-      <small className="hint">
-        Applies to headroom run by this app and restarts it. headroom then holds your prompts, code and replies in
-        memory and in its logs; leave it off when that matters.
-      </small>
+      <HeadroomSettings value={form.headroom} onChange={(v) => set('headroom', v)} external={headroomExternal} />
       <div className="actions">
         <button type="submit" className="primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
         {message && <span className={message.ok ? 'saved' : 'error-inline'}>{message.text}</span>}
@@ -319,7 +317,13 @@ export function App(): React.JSX.Element {
           <button onClick={() => setError(null)} aria-label="Dismiss">×</button>
         </div>
       )}
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} onSaved={setStatus} />}
+      {showSettings && (
+        <SettingsPanel
+          onClose={() => setShowSettings(false)}
+          onSaved={setStatus}
+          headroomExternal={status.compressorInfo?.managed === 'external'}
+        />
+      )}
       <div className="grid">
         <Card title="Proxy (mitmproxy)" status={status.proxy}>
           {status.proxyInfo && (

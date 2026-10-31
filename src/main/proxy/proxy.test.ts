@@ -22,6 +22,10 @@ describe('renderUnit', () => {
     expect(unit).toContain('ExecStart="/bin/mitmdump" "--allow-hosts" "^a$$"')
     expect(unit).toContain('Restart=always')
   })
+  it('writes quoted Environment lines', () => {
+    const unit = renderUnit({ description: 'x', exec: '/bin/h', args: [], env: { HEADROOM_BEACON: 'off', P: '50%' } })
+    expect(unit).toContain('Environment="HEADROOM_BEACON=off"\nEnvironment="P=50%%"')
+  })
 })
 
 describe('ProxyManager', () => {

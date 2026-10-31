@@ -49,6 +49,7 @@ must never leave clients pointing at a dead proxy port, so the services outlive 
 | `proxy/exec.ts` | Shell-free command runner; streaming runner for installs (whole lines) |
 | `compressors/headroom.ts` | `HeadroomBackend`: `/health`, `/stats-history` and `/transformations/feed` parsing (recent requests and their bodies) |
 | `compressors/headroom-service.ts` | `HeadroomService`: install/run headroom as a user service, external detection |
+| `compressors/headroom-options.ts` | headroom options: defaults, validation, mapping to `headroom proxy` flags and service environment, argument splitting |
 | `status.ts` | `StatusMonitor` (polling, combined health) and the status-line functions for each card |
 | `store.ts` | `AppStore`: `state.json` with settings and per-client `{ enabled, applied }` |
 | `settings.ts` | Validation of user settings |
@@ -115,6 +116,7 @@ These protect the user's configs and running sessions; keep them when changing c
   "proxyPort": 8877,
   "caFile": "/home/me/.mitmproxy/mitmproxy-ca-cert.pem",
   "headroomUrl": "http://127.0.0.1:6767",
+  "headroom": { "mode": "cache", "rpm": null, "logMessages": false, "extraArgs": "", "…": "see HeadroomOptions" },
   "autoRepair": true,
   "checkIntervalSec": 60,
   "clients": {
@@ -125,6 +127,9 @@ These protect the user's configs and running sessions; keep them when changing c
   }
 }
 ```
+
+Missing headroom options are filled from defaults on load; a top-level `headroomLogMessages` from older
+versions moves into `headroom.logMessages`.
 
 The services' unit files are regenerated from these settings; the app compares them with what it would write and
 shows **Apply** when they differ (`unit: outdated`), or when the unit came from `legacy/cdp.sh` (`legacy`).
