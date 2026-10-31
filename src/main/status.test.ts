@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ClientInfo } from '@shared/ipc'
-import { clientsStatus, overallHealth } from './status'
+import { clientsStatus, overallHealth, proxyStatus } from './status'
 
 describe('overallHealth', () => {
   it('is down when any part is down', () => {
@@ -27,5 +27,20 @@ describe('clientsStatus', () => {
   })
   it('is degraded when an enabled client lost its settings', () => {
     expect(clientsStatus([client({ state: 'partial' })])).toEqual({ health: 'degraded', detail: 'Claude Code: partial' })
+  })
+})
+
+describe('proxyStatus', () => {
+  const info = { port: 8877, mitmdump: '/m', uv: '/uv', unit: 'current' as const, active: true, listening: true, caExists: true }
+  it('is ok when our service serves', () => {
+    expect(proxyStatus(info).health).toBe('ok')
+  })
+  it('asks to migrate a legacy unit', () => {
+    expect(proxyStatus({ ...info, unit: 'legacy' })).toMatchObject({ health: 'degraded' })
+  })
+  it('explains why it is down', () => {
+    expect(proxyStatus({ ...info, listening: false, mitmdump: null }).detail).toMatch(/not installed/)
+    expect(proxyStatus({ ...info, listening: false, unit: 'missing' }).detail).toMatch(/not set up/)
+    expect(proxyStatus({ ...info, listening: false, active: false }).detail).toMatch(/stopped/)
   })
 })

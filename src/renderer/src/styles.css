@@ -81,3 +81,16 @@ footer { margin-top: 20px; color: var(--muted); font-size: 12px; }
 .bar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 2px; }
 .bar span { width: 100%; min-height: 2px; background: var(--ok); border-radius: 3px 3px 0 0; }
 .bar small { font-size: 10px; color: var(--muted); }
+.error-text { white-space: pre-wrap; font-size: 13px; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.actions button { padding: 4px 10px; font-size: 13px; }
+button.primary { background: var(--ok); border-color: var(--ok); color: #fff; }
+button:disabled { opacity: .6; cursor: default; }
+button.link { border: none; background: none; color: var(--muted); text-decoration: underline; padding: 4px 6px; }
+.note { margin: 8px 0 0; font-size: 12px; color: var(--degraded); }
+.log {
+  margin: 10px 0 0; max-height: 220px; overflow: auto; padding: 8px 10px; border-radius: 6px;
+  background: var(--bg); border: 1px solid var(--border); font: 11px/1.45 ui-monospace, monospace; white-space: pre-wrap;
+}
+.install { margin-top: 16px; }
+.install header { justify-content: space-between; }

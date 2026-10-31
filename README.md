@@ -20,7 +20,13 @@ The original shell version lives in [`legacy/`](legacy/).
   settings that disappeared while the proxy is up. Foreign values are reported as a conflict, never overwritten.
   Turning a client on is refused while nothing listens on the proxy port.
 - headroom: health and savings from `/stats-history` (sample in `examples/headroom-stats.json`).
-- Not yet: starting/installing mitmproxy and headroom (use `legacy/cdp.sh install` for the proxy for now).
+- Proxy: installs mitmproxy with `uv tool install mitmproxy` (after asking), writes and runs the systemd user
+  service `claude-desktop-proxy.service` (same name as the `cdp.sh` one, which "Apply" replaces), shows its logs.
+  The mitmproxy addon (`resources/mitmproxy/cdp_addon.py`) sends API requests to headroom while it answers
+  `/health` and straight to the API when it does not, so Claude keeps working without compression.
+- Stopping or removing the proxy from the app first removes the proxy settings from every client; they come back
+  when the proxy is started again. If the proxy dies on its own for more than ~5 s, the same happens automatically.
+- Not yet: installing/starting headroom itself, a settings page (port, headroom URL), autostart, packaging checks.
 
 App state lives in `~/.config/claude-desktop-proxy/state.json`; the first edit of a client config keeps a backup
 next to it (`settings.json.bak-claude-desktop-proxy`).

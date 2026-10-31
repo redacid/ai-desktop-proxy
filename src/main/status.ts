@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import type { AppStatus, ClientInfo, ComponentStatus, CompressorStats, Health } from '@shared/ipc'
+import type { AppStatus, ClientInfo, ComponentStatus, CompressorStats, Health, ProxyInfo } from '@shared/ipc'
 
 /** Combines component health: any down -> down, all ok -> ok, all unknown -> unknown, else degraded. */
 export function overallHealth(parts: Health[]): Health {
@@ -20,8 +20,24 @@ export function clientsStatus(list: ClientInfo[]): ComponentStatus {
   return { health: 'ok', detail: `routed: ${enabled.map((c) => c.name).join(', ')}` }
 }
 
+/** One line for the Proxy card from what ProxyManager found. */
+export function proxyStatus(info: ProxyInfo): ComponentStatus {
+  const where = `127.0.0.1:${info.port}`
+  if (info.listening) {
+    if (info.unit === 'legacy') return { health: 'degraded', detail: `running from the cdp.sh unit; set it up here to switch` }
+    if (info.unit === 'outdated') return { health: 'degraded', detail: `settings or app changed; apply to update the service` }
+    if (!info.active) return { health: 'degraded', detail: `${where} is served by something other than our service` }
+    if (!info.caExists) return { health: 'degraded', detail: 'CA certificate is missing' }
+    return { health: 'ok', detail: `listening on ${where}` }
+  }
+  if (!info.mitmdump) return { health: 'down', detail: 'mitmproxy is not installed' }
+  if (info.unit === 'missing') return { health: 'down', detail: 'service is not set up' }
+  return { health: 'down', detail: `service is stopped; nothing listens on ${where}` }
+}
+
 export interface StatusSources {
-  proxy(): Promise<ComponentStatus>
+  proxyInfo(): Promise<ProxyInfo>
+  proxy(info: ProxyInfo): Promise<ComponentStatus>
   compressor(): Promise<ComponentStatus>
   stats(): Promise<CompressorStats>
   clients(): Promise<ClientInfo[]>
@@ -34,6 +50,7 @@ export class StatusMonitor extends EventEmitter {
   private status: AppStatus = {
     overall: 'unknown',
     proxy: unknown,
+    proxyInfo: null,
     compressor: unknown,
     clients: unknown,
     clientList: [],
@@ -51,11 +68,12 @@ export class StatusMonitor extends EventEmitter {
   }
 
   async refresh(): Promise<AppStatus> {
-    const [proxy, compressor, clientList] = await Promise.all([
-      this.sources.proxy(),
+    const [proxyInfo, compressor, clientList] = await Promise.all([
+      this.sources.proxyInfo(),
       this.sources.compressor(),
       this.sources.clients()
     ])
+    const proxy = await this.sources.proxy(proxyInfo)
     let stats = this.status.stats // keep the last numbers if headroom blips
     if (compressor.health === 'ok') {
       try {
@@ -68,6 +86,7 @@ export class StatusMonitor extends EventEmitter {
     this.status = {
       overall: overallHealth([proxy.health, compressor.health, clients.health]),
       proxy,
+      proxyInfo,
       compressor,
       clients,
       clientList,

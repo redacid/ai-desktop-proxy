@@ -20,12 +20,16 @@ export class ClientManager extends EventEmitter {
   private timer: NodeJS.Timeout | null = null
   private debounce: NodeJS.Timeout | null = null
   private running: Promise<ClientInfo[]> | null = null
+  /** Set while the user has stopped the proxy: lost settings are not restored. */
+  private held = false
 
   constructor(
     private readonly adapters: ClientAdapter[],
     private readonly store: AppStore,
     private readonly proxyUp: (port: number) => Promise<boolean> = isPortListening,
-    private readonly caExists: (path: string) => Promise<boolean> = exists
+    private readonly caExists: (path: string) => Promise<boolean> = exists,
+    /** How long the proxy must stay down before client settings are pulled. */
+    private readonly confirmDownMs = 5000
   ) {
     super()
   }
@@ -83,17 +87,70 @@ export class ClientManager extends EventEmitter {
     return this.running
   }
 
-  private async check(): Promise<ClientInfo[]> {
+  /** True when the proxy is down now and still down after a short wait (not just restarting). */
+  private async proxyDownConfirmed(): Promise<string | null> {
+    if (!(await this.proxyProblem())) return null
+    await new Promise((r) => setTimeout(r, this.confirmDownMs))
+    return this.proxyProblem()
+  }
+
+  /**
+   * Removes our settings from every enabled client but keeps it enabled, and
+   * holds off restoring them until resume(). Used before the user stops or
+   * removes the proxy, so no client points at a proxy that is gone.
+   */
+  async suspendAll(): Promise<void> {
+    this.held = true
+    await this.running // a check in flight could re-apply right after we remove
     const env = this.env()
     for (const adapter of this.adapters) {
       const prefs = this.store.client(adapter.id)
+      if (!prefs.enabled) continue
+      try {
+        await adapter.remove(prefs.applied, env)
+        await this.store.updateClient(adapter.id, { applied: null })
+      } catch (err) {
+        console.error(`suspending ${adapter.id}:`, err)
+      }
+    }
+    await this.checkNow()
+  }
+
+  /** Lets checks restore enabled clients again (after the proxy is started). */
+  async resume(): Promise<void> {
+    this.held = false
+    await this.running
+    await this.checkNow()
+  }
+
+  private async check(): Promise<ClientInfo[]> {
+    const env = this.env()
+    let down: string | null | undefined // proxy state, probed at most once per check
+    for (const adapter of this.adapters) {
+      const prefs = this.store.client(adapter.id)
       let { state, detail } = await adapter.inspect(env)
+      let suspended = false
+
+      if (prefs.enabled && state === 'applied') {
+        down ??= await this.proxyDownConfirmed()
+        if (down) {
+          try {
+            await adapter.remove(prefs.applied, env)
+            await this.store.updateClient(adapter.id, { applied: null })
+            ;({ state } = await adapter.inspect(env))
+            detail = `proxy down (${down}): settings removed until it is back`
+            suspended = true
+          } catch (err) {
+            detail = `proxy down, could not remove settings: ${(err as Error).message}`
+          }
+        }
+      }
 
       const lost = state === 'absent' || state === 'partial'
-      if (prefs.enabled && lost && this.store.settings.autoRepair) {
-        const problem = await this.proxyProblem()
+      if (prefs.enabled && lost && !suspended && this.store.settings.autoRepair) {
+        const problem = this.held ? 'proxy stopped from the app' : down ?? (await this.proxyProblem())
         if (problem) {
-          detail = `settings missing, not restored: ${problem}`
+          detail = `waiting for the proxy, settings will be restored: ${problem}`
         } else {
           try {
             const applied = await adapter.apply(env, prefs.applied)

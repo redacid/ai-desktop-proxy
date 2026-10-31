@@ -6,7 +6,7 @@ STAMP    := node_modules/.install-stamp
 ELECTRON := node_modules/electron/path.txt
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev build run run-hidden typecheck test test-legacy lint check dist dist-appimage dist-deb clean distclean
+.PHONY: help install dev build run run-hidden typecheck test test-addon test-legacy lint check dist dist-appimage dist-deb clean distclean
 
 help: ## Show this list
 	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  \033[36m%-14s\033[0m %s\n",$$1,$$2}'
@@ -40,12 +40,15 @@ typecheck: $(STAMP) ## Type-check main, preload and renderer
 test: $(STAMP) ## Run unit tests (vitest)
 	$(NPM) test
 
+test-addon: ## Run the mitmproxy addon tests (python3, no mitmproxy needed)
+	python3 resources/mitmproxy/test_cdp_addon.py
+
 test-legacy: ## Run the old settings_env.py test
 	cd legacy && python3 test_settings_env.py
 
 lint: typecheck ## Alias for typecheck until a linter is added
 
-check: typecheck test ## Everything CI should run
+check: typecheck test test-addon ## Everything CI should run
 
 dist: build $(ELECTRON) ## Package AppImage and deb into dist/
 	$(NODE_BIN)/electron-builder --linux

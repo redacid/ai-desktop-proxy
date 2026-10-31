@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AppStatus, ClientInfo, ComponentStatus, CompressorStats } from '@shared/ipc'
+import type { AppStatus, ClientInfo, ComponentStatus, CompressorStats, ProxyAction, ProxyInfo } from '@shared/ipc'
 
 const int = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 })
 const usd = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
@@ -59,6 +59,47 @@ function Client({ client, busy, onToggle }: {
   )
 }
 
+function proxyButtons(info: ProxyInfo): { action: ProxyAction; label: string; primary?: boolean }[] {
+  if (!info.mitmdump) return [{ action: 'install', label: 'Install mitmproxy', primary: true }]
+  if (info.unit === 'missing') return [{ action: 'setup', label: 'Set up & start', primary: true }]
+  const buttons: { action: ProxyAction; label: string; primary?: boolean }[] = []
+  if (info.unit === 'legacy' || info.unit === 'outdated') buttons.push({ action: 'setup', label: 'Apply', primary: true })
+  if (info.listening) buttons.push({ action: 'restart', label: 'Restart' }, { action: 'stop', label: 'Stop' })
+  else buttons.push({ action: 'start', label: 'Start', primary: !buttons.length })
+  buttons.push({ action: 'remove', label: 'Remove' })
+  return buttons
+}
+
+function ProxyControls({ info, compressorDown, busy, onAction }: {
+  info: ProxyInfo
+  compressorDown: boolean
+  busy: ProxyAction | null
+  onAction: (action: ProxyAction) => void
+}): React.JSX.Element {
+  const [logs, setLogs] = useState<string | null>(null)
+  async function toggleLogs(): Promise<void> {
+    setLogs(logs === null ? await window.api.proxyLogs() : null)
+  }
+  return (
+    <>
+      {info.listening && compressorDown && (
+        <p className="note">headroom is down: API requests go straight to Anthropic, without compression.</p>
+      )}
+      <div className="actions">
+        {proxyButtons(info).map((b) => (
+          <button key={b.action} className={b.primary ? 'primary' : ''} disabled={busy !== null} onClick={() => onAction(b.action)}>
+            {busy === b.action ? '…' : b.label}
+          </button>
+        ))}
+        {info.unit !== 'missing' && (
+          <button className="link" onClick={() => void toggleLogs()}>{logs === null ? 'Logs' : 'Hide logs'}</button>
+        )}
+      </div>
+      {logs !== null && <pre className="log">{logs || 'no log lines'}</pre>}
+    </>
+  )
+}
+
 function Stats({ stats }: { stats: CompressorStats }): React.JSX.Element {
   const { lifetime, session } = stats
   const days = stats.daily.slice(-14)
@@ -109,11 +150,31 @@ export function App(): React.JSX.Element {
   const [status, setStatus] = useState<AppStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [proxyBusy, setProxyBusy] = useState<ProxyAction | null>(null)
+  const [installLog, setInstallLog] = useState<string[]>([])
 
   useEffect(() => {
     void window.api.getStatus().then(setStatus)
-    return window.api.onStatus(setStatus)
+    const offStatus = window.api.onStatus(setStatus)
+    const offLog = window.api.onInstallLog((line) => setInstallLog((l) => [...l.slice(-200), line]))
+    return () => {
+      offStatus()
+      offLog()
+    }
   }, [])
+
+  async function runProxy(action: ProxyAction): Promise<void> {
+    setProxyBusy(action)
+    setError(null)
+    if (action === 'install') setInstallLog([])
+    try {
+      const result = await window.api.proxyAction(action)
+      setStatus(result.status)
+      if (result.error) setError(result.error)
+    } finally {
+      setProxyBusy(null)
+    }
+  }
 
   async function toggle(id: string, enabled: boolean): Promise<void> {
     setBusy(true)
@@ -139,12 +200,21 @@ export function App(): React.JSX.Element {
       </header>
       {error && (
         <div className="error" role="alert">
-          {error}
+          <span className="error-text">{error}</span>
           <button onClick={() => setError(null)} aria-label="Dismiss">×</button>
         </div>
       )}
       <div className="grid">
-        <Card title="Proxy (mitmproxy)" status={status.proxy} />
+        <Card title="Proxy (mitmproxy)" status={status.proxy}>
+          {status.proxyInfo && (
+            <ProxyControls
+              info={status.proxyInfo}
+              compressorDown={status.compressor.health === 'down'}
+              busy={proxyBusy}
+              onAction={(a) => void runProxy(a)}
+            />
+          )}
+        </Card>
         <Card title="Compressor (headroom)" status={status.compressor} />
         <Card title="Clients" status={status.clients}>
           <ul className="clients">
@@ -154,6 +224,15 @@ export function App(): React.JSX.Element {
           </ul>
         </Card>
       </div>
+      {installLog.length > 0 && (
+        <section className="card install">
+          <header>
+            <h2>Installing mitmproxy</h2>
+            {proxyBusy === null && <button className="link" onClick={() => setInstallLog([])}>Close</button>}
+          </header>
+          <pre className="log">{installLog.join('\n')}</pre>
+        </section>
+      )}
       {status.stats && <Stats stats={status.stats} />}
       <footer>
         Last check: {status.checkedAt ? new Date(status.checkedAt).toLocaleTimeString() : 'never'}

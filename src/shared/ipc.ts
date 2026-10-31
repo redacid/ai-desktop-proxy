@@ -45,9 +45,23 @@ export interface CompressorStats {
   generatedAt: string | null
 }
 
+export interface ProxyInfo {
+  port: number
+  mitmdump: string | null // path, or null when mitmproxy is not installed
+  uv: string | null
+  /** current = written by this app version; legacy = written by cdp.sh; outdated = settings or app changed */
+  unit: 'missing' | 'legacy' | 'outdated' | 'current'
+  active: boolean
+  listening: boolean
+  caExists: boolean
+}
+
+export type ProxyAction = 'install' | 'setup' | 'start' | 'stop' | 'restart' | 'remove'
+
 export interface AppStatus {
   overall: Health
   proxy: ComponentStatus
+  proxyInfo: ProxyInfo | null
   compressor: ComponentStatus
   clients: ComponentStatus
   clientList: ClientInfo[]
@@ -66,12 +80,18 @@ export const IPC = {
   getStatus: 'status:get',
   refreshStatus: 'status:refresh',
   statusChanged: 'status:changed',
-  setClientEnabled: 'client:set-enabled'
+  setClientEnabled: 'client:set-enabled',
+  proxyAction: 'proxy:action',
+  proxyLogs: 'proxy:logs',
+  installLog: 'proxy:install-log'
 } as const
 
 export interface Api {
   getStatus(): Promise<AppStatus>
   refreshStatus(): Promise<AppStatus>
   setClientEnabled(id: string, enabled: boolean): Promise<ActionResult>
+  proxyAction(action: ProxyAction): Promise<ActionResult>
+  proxyLogs(): Promise<string>
   onStatus(listener: (status: AppStatus) => void): () => void
+  onInstallLog(listener: (line: string) => void): () => void
 }

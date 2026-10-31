@@ -13,7 +13,7 @@ let store: AppStore
 let proxyUp: boolean
 
 function manager(): ClientManager {
-  return new ClientManager([new ClaudeCodeAdapter(settings)], store, async () => proxyUp, async () => true)
+  return new ClientManager([new ClaudeCodeAdapter(settings)], store, async () => proxyUp, async () => true, 0)
 }
 
 beforeEach(async () => {
@@ -61,12 +61,40 @@ describe('ClientManager', () => {
     proxyUp = false
     await m.checkNow()
     expect(m.list[0].state).toBe('absent')
-    expect(m.list[0].detail).toMatch(/not restored/)
+    expect(m.list[0].detail).toMatch(/waiting for the proxy/)
 
     proxyUp = true
     await m.checkNow()
     expect(m.list[0].state).toBe('applied')
     expect(m.list[0].detail).toMatch(/^restored/)
+  })
+
+  it('pulls settings while the proxy is down and restores them when it is back', async () => {
+    const m = manager()
+    await m.setEnabled('claude-code', true)
+    proxyUp = false
+    await m.checkNow()
+    expect(await env()).toBeUndefined()
+    expect(m.list[0]).toMatchObject({ enabled: true, state: 'absent' })
+    expect(m.list[0].detail).toMatch(/settings removed until it is back/)
+
+    proxyUp = true
+    await m.checkNow()
+    expect(m.list[0]).toMatchObject({ enabled: true, state: 'applied' })
+  })
+
+  it('suspendAll removes settings, keeps clients enabled, and restores only on resume', async () => {
+    const m = manager()
+    await m.setEnabled('claude-code', true)
+    await m.suspendAll() // proxy still up, as right before a stop
+    expect(await env()).toBeUndefined()
+    expect(store.client('claude-code')).toEqual({ enabled: true, applied: null })
+    await m.checkNow()
+    expect(await env()).toBeUndefined()
+    expect(m.list[0].detail).toMatch(/stopped from the app/)
+
+    await m.resume()
+    expect(m.list[0].state).toBe('applied')
   })
 
   it('reports a foreign value instead of overwriting it', async () => {
