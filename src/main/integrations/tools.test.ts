@@ -130,18 +130,18 @@ describe('tool detection and update cadence', () => {
     expect(f.setup).not.toHaveBeenCalled()
   })
 
-  // Seven update sources: headroom, RTK, Ponytail, Chisle, Serena, MarkItDown, Context7.
+  // Eight update sources: headroom, RTK, Ponytail, Chisle, Serena, MarkItDown, Context7, Codebase Memory.
   it('throttles network checks, shares in-flight work, and supports a forced check', async () => {
     const f = await fixture()
     await Promise.all([f.manager.refresh(), f.manager.refresh()])
-    expect(f.request).toHaveBeenCalledTimes(7)
+    expect(f.request).toHaveBeenCalledTimes(8)
     await f.manager.refresh()
-    expect(f.request).toHaveBeenCalledTimes(7)
+    expect(f.request).toHaveBeenCalledTimes(8)
     f.state.now += UPDATE_INTERVAL_MS
     await f.manager.refresh()
-    expect(f.request).toHaveBeenCalledTimes(14)
+    expect(f.request).toHaveBeenCalledTimes(16)
     await f.manager.refresh(true)
-    expect(f.request).toHaveBeenCalledTimes(21)
+    expect(f.request).toHaveBeenCalledTimes(24)
     expect(f.stream).not.toHaveBeenCalled()
   })
 
@@ -149,7 +149,7 @@ describe('tool detection and update cadence', () => {
     const f = await fixture()
     await f.manager.refresh()
     const restarted = new ToolManager(f.deps)
-    try { await restarted.start(); expect(f.request).toHaveBeenCalledTimes(7) }
+    try { await restarted.start(); expect(f.request).toHaveBeenCalledTimes(8) }
     finally { restarted.stop() }
   })
 
@@ -160,7 +160,7 @@ describe('tool detection and update cadence', () => {
     const tools = await f.manager.refresh(true)
     expect(tools[0]).toMatchObject({ installed: true, latest: '0.41.0', error: expect.stringContaining('offline') })
     await f.manager.refresh()
-    expect(f.request).toHaveBeenCalledTimes(14)
+    expect(f.request).toHaveBeenCalledTimes(16)
   })
 
   it('does not offer installation on a detection failure', async () => {
@@ -532,6 +532,8 @@ describe('Context7', () => {
     const plan = await f.manager.plan('context7', 'connect-codex')
     expect(plan.commands).toEqual([{ cmd: '/fake/codex', args: ['mcp', 'add', 'context7', '--', '/fake/npx', '-y', '@upstash/context7-mcp@5.4.0'] }])
     await expect(f.manager.plan('context7', 'uninstall')).rejects.toThrow(/Stop/)
+    expect((await f.manager.plan('codebase-memory', 'connect-claude')).commands).toEqual([{ cmd: '/fake/claude',
+      args: ['mcp', 'add', '--scope', 'user', 'codebase-memory', '--', '/fake/npx', '-y', 'codebase-memory-mcp@5.4.0'] }])
   })
 
   it('recognizes only its own npx pin', () => {

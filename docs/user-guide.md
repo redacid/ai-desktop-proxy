@@ -176,6 +176,14 @@ Registrations or marketplaces set up outside the app are never touched.
   remote server), its row shows **set up elsewhere**. **Stop** removes the app's registrations; there is nothing
   else to remove.
 
+- **Codebase Memory:** [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) indexes the code into
+  a local knowledge graph the agent queries instead of re-reading files. Handled like Context7: run by npx from a
+  pinned npm release (`npx -y codebase-memory-mcp@<version>`; the package downloads and verifies the release binary
+  on first start), a switch per client, **Update** re-pins. Its own `codebase-memory@codebase-memory` Claude Code
+  plugin counts as set up elsewhere. Indexes stay in `~/.cache/codebase-memory-mcp`; the app never deletes them,
+  so the card has **Stop** but no **Remove from system**. The project's full installer (`codebase-memory-mcp install`,
+  with skills and hooks) is not used.
+
 Each card also shows what the tool achieved, refreshed with the presence check:
 
 - **RTK:** tokens saved, average saving and commands filtered, plus tokens saved per day for the last 14 days,
@@ -190,7 +198,7 @@ Each card also shows what the tool achieved, refreshed with the presence check:
   and how many outputs it compressed, from `~/.claude/.chisle-compress-stats.json`.
 - **Serena, MarkItDown:** none; Serena keeps its tool-usage statistics only in a running server's dashboard.
 
-Version sources are PyPI (`headroom-ai`, `serena-agent`, `markitdown-mcp`), npm (`@upstash/context7-mcp`), GitHub
+Version sources are PyPI (`headroom-ai`, `serena-agent`, `markitdown-mcp`), npm (`@upstash/context7-mcp`, `codebase-memory-mcp`), GitHub
 Releases (`rtk-ai/rtk`), and
 the official Ponytail and Chisle plugin manifests. GitHub rate limits, an offline machine, or unsupported client CLI output can prevent a check;
 the error is shown without attempting an installation. After a partial native-command failure, review
