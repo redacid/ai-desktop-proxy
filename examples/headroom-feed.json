@@ -1,0 +1,124 @@
+{
+  "_comment": "Synthetic sample in the shape of headroom 0.42 GET /transformations/feed?include_messages=1 (bodies are only present when headroom runs with --log-messages).",
+  "log_full_messages": true,
+  "transformations": [
+    {
+      "request_id": "hr_req_0002",
+      "timestamp": "2026-10-31T10:05:12Z",
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "input_tokens_original": 5210,
+      "input_tokens_optimized": 1180,
+      "tokens_saved": 4030,
+      "savings_percent": 77.35,
+      "transforms_applied": [
+        "smart_crusher:tool_result",
+        "cache_align"
+      ],
+      "turn_id": "turn_7",
+      "uncached_input_tokens": 1180,
+      "cache_write_tokens": 0,
+      "cache_read_tokens": 18240,
+      "request_messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Why does the build fail? Check the CI log."
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Let me read the log."
+            },
+            {
+              "type": "tool_use",
+              "id": "toolu_01",
+              "name": "Bash",
+              "input": {
+                "command": "cat ci.log"
+              }
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "toolu_01",
+              "content": "2026-10-31T10:00:00 INFO worker-0 processed batch 0 in 20ms\n2026-10-31T10:00:01 INFO worker-1 processed batch 1 in 21ms\n2026-10-31T10:00:02 INFO worker-2 processed batch 2 in 22ms\n2026-10-31T10:00:03 INFO worker-3 processed batch 3 in 23ms\n2026-10-31T10:00:04 INFO worker-0 processed batch 4 in 24ms\n2026-10-31T10:00:05 INFO worker-1 processed batch 5 in 25ms\n2026-10-31T10:00:06 INFO worker-2 processed batch 6 in 26ms\n2026-10-31T10:00:07 INFO worker-3 processed batch 7 in 20ms\n2026-10-31T10:00:08 INFO worker-0 processed batch 8 in 21ms\n2026-10-31T10:00:09 INFO worker-1 processed batch 9 in 22ms\n2026-10-31T10:00:10 INFO worker-2 processed batch 10 in 23ms\n2026-10-31T10:00:11 INFO worker-3 processed batch 11 in 24ms\n2026-10-31T10:00:12 INFO worker-0 processed batch 12 in 25ms\n2026-10-31T10:00:13 INFO worker-1 processed batch 13 in 26ms\n2026-10-31T10:00:14 INFO worker-2 processed batch 14 in 20ms\n2026-10-31T10:00:15 INFO worker-3 processed batch 15 in 21ms\n2026-10-31T10:00:16 INFO worker-0 processed batch 16 in 22ms\n2026-10-31T10:00:17 INFO worker-1 processed batch 17 in 23ms\n2026-10-31T10:00:18 INFO worker-2 processed batch 18 in 24ms\n2026-10-31T10:00:19 INFO worker-3 processed batch 19 in 25ms\n2026-10-31T10:00:20 INFO worker-0 processed batch 20 in 26ms\n2026-10-31T10:00:21 INFO worker-1 processed batch 21 in 20ms\n2026-10-31T10:00:22 INFO worker-2 processed batch 22 in 21ms\n2026-10-31T10:00:23 INFO worker-3 processed batch 23 in 22ms\n2026-10-31T10:00:24 INFO worker-0 processed batch 24 in 23ms\n2026-10-31T10:00:25 INFO worker-1 processed batch 25 in 24ms\n2026-10-31T10:00:26 INFO worker-2 processed batch 26 in 25ms\n2026-10-31T10:00:27 INFO worker-3 processed batch 27 in 26ms\n2026-10-31T10:00:28 INFO worker-0 processed batch 28 in 20ms\n2026-10-31T10:00:29 INFO worker-1 processed batch 29 in 21ms\n2026-10-31T10:00:30 INFO worker-2 processed batch 30 in 22ms\n2026-10-31T10:00:31 INFO worker-3 processed batch 31 in 23ms\n2026-10-31T10:00:32 INFO worker-0 processed batch 32 in 24ms\n2026-10-31T10:00:33 INFO worker-1 processed batch 33 in 25ms\n2026-10-31T10:00:34 INFO worker-2 processed batch 34 in 26ms\n2026-10-31T10:00:35 INFO worker-3 processed batch 35 in 20ms\n2026-10-31T10:00:36 INFO worker-0 processed batch 36 in 21ms\n2026-10-31T10:00:37 INFO worker-1 processed batch 37 in 22ms\n2026-10-31T10:00:38 INFO worker-2 processed batch 38 in 23ms\n2026-10-31T10:00:39 INFO worker-3 processed batch 39 in 24ms\n2026-10-31T10:00:40 INFO worker-0 processed batch 40 in 25ms\n2026-10-31T10:00:41 INFO worker-1 processed batch 41 in 26ms\n2026-10-31T10:00:42 INFO worker-2 processed batch 42 in 20ms\n2026-10-31T10:00:43 INFO worker-3 processed batch 43 in 21ms\n2026-10-31T10:00:44 INFO worker-0 processed batch 44 in 22ms\n2026-10-31T10:00:45 INFO worker-1 processed batch 45 in 23ms\n2026-10-31T10:00:46 INFO worker-2 processed batch 46 in 24ms\n2026-10-31T10:00:47 INFO worker-3 processed batch 47 in 25ms\n2026-10-31T10:00:48 INFO worker-0 processed batch 48 in 26ms\n2026-10-31T10:00:49 INFO worker-1 processed batch 49 in 20ms\n2026-10-31T10:00:50 INFO worker-2 processed batch 50 in 21ms\n2026-10-31T10:00:51 INFO worker-3 processed batch 51 in 22ms\n2026-10-31T10:00:52 INFO worker-0 processed batch 52 in 23ms\n2026-10-31T10:00:53 INFO worker-1 processed batch 53 in 24ms\n2026-10-31T10:00:54 INFO worker-2 processed batch 54 in 25ms\n2026-10-31T10:00:55 INFO worker-3 processed batch 55 in 26ms\n2026-10-31T10:00:56 INFO worker-0 processed batch 56 in 20ms\n2026-10-31T10:00:57 INFO worker-1 processed batch 57 in 21ms\n2026-10-31T10:00:58 INFO worker-2 processed batch 58 in 22ms\n2026-10-31T10:00:59 INFO worker-3 processed batch 59 in 23ms\n2026-10-31T10:01:00 INFO worker-0 processed batch 60 in 24ms\n2026-10-31T10:01:01 INFO worker-1 processed batch 61 in 25ms\n2026-10-31T10:01:02 INFO worker-2 processed batch 62 in 26ms\n2026-10-31T10:01:03 INFO worker-3 processed batch 63 in 20ms\n2026-10-31T10:01:04 INFO worker-0 processed batch 64 in 21ms\n2026-10-31T10:01:05 INFO worker-1 processed batch 65 in 22ms\n2026-10-31T10:01:06 INFO worker-2 processed batch 66 in 23ms\n2026-10-31T10:01:07 INFO worker-3 processed batch 67 in 24ms\n2026-10-31T10:01:08 INFO worker-0 processed batch 68 in 25ms\n2026-10-31T10:01:09 INFO worker-1 processed batch 69 in 26ms\n2026-10-31T10:01:10 INFO worker-2 processed batch 70 in 20ms\n2026-10-31T10:01:11 INFO worker-3 processed batch 71 in 21ms\n2026-10-31T10:01:12 INFO worker-0 processed batch 72 in 22ms\n2026-10-31T10:01:13 INFO worker-1 processed batch 73 in 23ms\n2026-10-31T10:01:14 INFO worker-2 processed batch 74 in 24ms\n2026-10-31T10:01:15 INFO worker-3 processed batch 75 in 25ms\n2026-10-31T10:01:16 INFO worker-0 processed batch 76 in 26ms\n2026-10-31T10:01:17 INFO worker-1 processed batch 77 in 20ms\n2026-10-31T10:01:18 INFO worker-2 processed batch 78 in 21ms\n2026-10-31T10:01:19 INFO worker-3 processed batch 79 in 22ms\n2026-10-31T10:01:20 INFO worker-0 processed batch 80 in 23ms\n2026-10-31T10:01:21 INFO worker-1 processed batch 81 in 24ms\n2026-10-31T10:01:22 INFO worker-2 processed batch 82 in 25ms\n2026-10-31T10:01:23 INFO worker-3 processed batch 83 in 26ms\n2026-10-31T10:01:24 INFO worker-0 processed batch 84 in 20ms\n2026-10-31T10:01:25 INFO worker-1 processed batch 85 in 21ms\n2026-10-31T10:01:26 INFO worker-2 processed batch 86 in 22ms\n2026-10-31T10:01:27 INFO worker-3 processed batch 87 in 23ms\n2026-10-31T10:01:28 INFO worker-0 processed batch 88 in 24ms\n2026-10-31T10:01:29 INFO worker-1 processed batch 89 in 25ms\n2026-10-31T10:01:30 INFO worker-2 processed batch 90 in 26ms\n2026-10-31T10:01:31 INFO worker-3 processed batch 91 in 20ms\n2026-10-31T10:01:32 INFO worker-0 processed batch 92 in 21ms\n2026-10-31T10:01:33 INFO worker-1 processed batch 93 in 22ms\n2026-10-31T10:01:34 INFO worker-2 processed batch 94 in 23ms\n2026-10-31T10:01:35 INFO worker-3 processed batch 95 in 24ms\n2026-10-31T10:01:36 INFO worker-0 processed batch 96 in 25ms\n2026-10-31T10:01:37 INFO worker-1 processed batch 97 in 26ms\n2026-10-31T10:01:38 INFO worker-2 processed batch 98 in 20ms\n2026-10-31T10:01:39 INFO worker-3 processed batch 99 in 21ms\n2026-10-31T10:01:40 INFO worker-0 processed batch 100 in 22ms\n2026-10-31T10:01:41 INFO worker-1 processed batch 101 in 23ms\n2026-10-31T10:01:42 INFO worker-2 processed batch 102 in 24ms\n2026-10-31T10:01:43 INFO worker-3 processed batch 103 in 25ms\n2026-10-31T10:01:44 INFO worker-0 processed batch 104 in 26ms\n2026-10-31T10:01:45 INFO worker-1 processed batch 105 in 20ms\n2026-10-31T10:01:46 INFO worker-2 processed batch 106 in 21ms\n2026-10-31T10:01:47 INFO worker-3 processed batch 107 in 22ms\n2026-10-31T10:01:48 INFO worker-0 processed batch 108 in 23ms\n2026-10-31T10:01:49 INFO worker-1 processed batch 109 in 24ms\n2026-10-31T10:01:50 INFO worker-2 processed batch 110 in 25ms\n2026-10-31T10:01:51 INFO worker-3 processed batch 111 in 26ms\n2026-10-31T10:01:52 INFO worker-0 processed batch 112 in 20ms\n2026-10-31T10:01:53 INFO worker-1 processed batch 113 in 21ms\n2026-10-31T10:01:54 INFO worker-2 processed batch 114 in 22ms\n2026-10-31T10:01:55 INFO worker-3 processed batch 115 in 23ms\n2026-10-31T10:01:56 INFO worker-0 processed batch 116 in 24ms\n2026-10-31T10:01:57 INFO worker-1 processed batch 117 in 25ms\n2026-10-31T10:01:58 INFO worker-2 processed batch 118 in 26ms\n2026-10-31T10:01:59 INFO worker-3 processed batch 119 in 20ms\n2026-10-31T10:02:00 ERROR test_settings failed: expected 8877, got 9999"
+            }
+          ]
+        }
+      ],
+      "compressed_messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Why does the build fail? Check the CI log."
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Let me read the log."
+            },
+            {
+              "type": "tool_use",
+              "id": "toolu_01",
+              "name": "Bash",
+              "input": {
+                "command": "cat ci.log"
+              }
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "toolu_01",
+              "content": "2026-10-31T10:00:00 INFO worker-0 processed batch 0 in 20ms\n[118 similar lines omitted by headroom; retrieve with hash 3f9a2c]\n2026-10-31T10:01:59 INFO worker-3 processed batch 119 in 21ms\n2026-10-31T10:02:00 ERROR test_settings failed: expected 8877, got 9999"
+            }
+          ]
+        }
+      ],
+      "response_content": "The build fails in test_settings: the test expects port 8877 but the settings fixture sets 9999."
+    },
+    {
+      "request_id": "hr_req_0001",
+      "timestamp": "2026-10-31T10:04:40Z",
+      "provider": "anthropic",
+      "model": "claude-haiku-5-5",
+      "input_tokens_original": 310,
+      "input_tokens_optimized": 310,
+      "tokens_saved": 0,
+      "savings_percent": 0.0,
+      "transforms_applied": [],
+      "turn_id": "turn_6",
+      "uncached_input_tokens": 310,
+      "cache_write_tokens": 2048,
+      "cache_read_tokens": 0,
+      "request_messages": [
+        {
+          "role": "user",
+          "content": "Summarise the session title in five words."
+        }
+      ],
+      "compressed_messages": null,
+      "response_content": "Fix failing CI settings test"
+    }
+  ]
+}

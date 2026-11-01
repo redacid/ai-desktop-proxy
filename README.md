@@ -1,55 +1,68 @@
-# claude-desktop-proxy
+# AI Desktop Proxy
 
-Claude Code Desktop forces `ANTHROPIC_BASE_URL=https://api.anthropic.com` for the CLI it starts, so a
-[headroom](https://github.com/headroomlabs-ai/headroom) proxy set up as the base URL is skipped. Other `env` keys from
-`~/.claude/settings.json` still reach the CLI, and the CLI honours `HTTPS_PROXY` and `NODE_EXTRA_CA_CERTS`. This
-project uses that:
+A Linux tray app (Electron) that routes AI coding clients through a local token-compression proxy.
+
+Claude Code Desktop forces `ANTHROPIC_BASE_URL=https://api.anthropic.com`, so a compressor such as
+[headroom](https://github.com/headroomlabs-ai/headroom) cannot be set as the base URL. The CLI still honours
+`HTTPS_PROXY` and `NODE_EXTRA_CA_CERTS` from `~/.claude/settings.json`. The app uses that. Codex cannot use an
+HTTPS proxy, but takes `openai_base_url` in `~/.codex/config.toml`, so the same mitmdump has a second, reverse
+listener for it:
 
 ```
-claude ──HTTPS_PROXY──► mitmdump 127.0.0.1:8877
-                          ├─ api.anthropic.com → decrypted → headroom (127.0.0.1:6767) → api.anthropic.com
-                          └─ any other host    → plain CONNECT tunnel, not decrypted
+claude ──HTTPS_PROXY──► mitmdump 127.0.0.1:8877 (systemd user service)
+                          ├─ api.anthropic.com ─► headroom 127.0.0.1:6767 ─► api.anthropic.com
+                          │                       (headroom down → straight to api.anthropic.com)
+                          └─ any other host ─────► plain CONNECT tunnel, not decrypted
+codex ──openai_base_url─► mitmdump 127.0.0.1:8878 (reverse listener, same service)
+                          └─ /v1/… ─────────────► headroom ─► api.openai.com or chatgpt.com/backend-api/codex
+                                                  (headroom down → straight to the API Codex would use)
 ```
 
-- Only `api.anthropic.com` is decrypted (`--allow-hosts`). Replies are streamed through (`stream_large_bodies=1`).
-- The mitmproxy CA is trusted only by processes that get `NODE_EXTRA_CA_CERTS`, never by the system store.
-- No loop: headroom is started by Headroom Desktop without `HTTPS_PROXY`, so it calls Anthropic directly.
-- `NO_PROXY=127.0.0.1,localhost` keeps the console `claude` (base URL = headroom) off the proxy.
-- `ANTHROPIC_UNIX_SOCKET` + `headroom proxy --uds` does not work: the CLI then treats the session as API-key auth.
+What the app does:
 
-## Requirements
+- turns routing on and off per client (Claude Code, Codex) by editing only its own keys in the client config,
+  and keeps them in place: checks at start, on every file change and on a timer;
+- installs mitmproxy and headroom with `uv` (after asking) and runs them as systemd user services;
+- shows proxy, headroom and client status plus headroom's savings, and lives in the tray.
+- detects RTK and Ponytail per client, offers installation, and checks headroom/RTK/Ponytail updates every six
+  hours; installs, updates and RTK hook connections require approval with the exact commands or download steps.
 
-Linux with systemd user services, `uv`, `curl`, `python3`, and headroom already answering on `127.0.0.1:6767`.
+## Quick start
 
-## Usage
+Requirements: Linux with systemd user services, Node.js 22+, npm, [uv](https://docs.astral.sh/uv/), `ss` (iproute2).
 
 ```bash
-./cdp.sh install    # installs mitmproxy (uv tool), systemd user unit, checks the chain, then edits settings.json
-./cdp.sh check      # api.anthropic.com reaches headroom, other hosts tunnel
-./cdp.sh status     # unit state, settings env, headroom totals
-./cdp.sh uninstall  # removes the settings env first, then the unit
+make install   # npm dependencies and the Electron binary
+make run       # build and start the app
 ```
 
-After `install`, open a **new** Desktop session; running ones keep their old environment.
+In the window: **Install mitmproxy** (or **Apply** if the old `cdp.sh` unit exists), make sure headroom answers
+(**Install headroom** if it does not), then switch **Claude Code** or **Codex** on. Open a new session to use it;
+running sessions keep their old settings.
 
-| Variable | Default |
+## Documentation
+
+| Document | For |
 |---|---|
-| `CDP_PORT` | `8877` |
-| `CDP_HEADROOM_URL` | `http://127.0.0.1:6767` |
-| `CDP_SETTINGS` | `~/.claude/settings.json` |
+| [docs/user-guide.md](docs/user-guide.md) | Using the app: cards, actions, settings, troubleshooting |
+| [docs/architecture.md](docs/architecture.md) | How it works: processes, modules, files it writes, safety rules |
+| [docs/development.md](docs/development.md) | Building, testing, extending (new clients, compressors) |
+| [docs/plan.md](docs/plan.md) | Planned work and deferred headroom integration improvements |
+| [AGENTS.md](AGENTS.md) | Instructions for coding agents working in this repository |
+| [legacy/README.md](legacy/README.md) | The original shell version (`cdp.sh`), kept for reference |
 
-`install` refuses to touch `settings.json` when it already sets one of the three variables to a different value,
-and keeps a one-time backup in `settings.json.bak-claude-desktop-proxy`. Logs: `journalctl --user -u claude-desktop-proxy`.
+## Status
 
-## Caveats
+Done: Claude Code and Codex clients, mitmproxy service with headroom fallback, headroom service with its options in Settings,
+statistics with expandable recent requests, approved tool installation/update checks and RTK client connections, settings,
+start at login. GitHub CI validates every push; version tags publish deb/rpm releases. Not yet: package installation smoke tests, Cursor client, macOS.
+Planned headroom improvements: diagnostics, quotas, detailed savings, CCR inspection and tuning; see [the project plan](docs/plan.md).
 
-- `HTTPS_PROXY` is inherited by the agent's Bash commands (`git`, `curl`, `npm`): they tunnel through mitmdump
-  without decryption. If the unit is down, they fail too, which is why the unit runs with `Restart=always`.
-- headroom's SessionStart guard (`headroom-claude-guard.py`) may report the route as wrong in Desktop sessions,
-  since their base URL is not headroom.
+## CI and releases
 
-## Test
+GitHub Actions runs validation, tests and a build on every push and pull request. A pushed version tag such as
+`0.1.0` additionally builds Linux x64 deb/rpm packages and publishes them in a GitHub Release after checks pass.
+See [release instructions](docs/development.md#github-ci-and-releases).
 
-```bash
-python3 test_settings_env.py
-```
+Use `make bump` to increment the app version, or `make version VERSION=0.2.0` to also prepare CHANGELOG.md.
+GitHub Release descriptions use that version’s changelog section.

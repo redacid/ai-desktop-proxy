@@ -1,0 +1,14 @@
+appId: ua.redacid.ai-desktop-proxy
+productName: AI Desktop Proxy
+directories:
+  output: dist
+files:
+  - out/**
+extraResources:
+  - from: resources
+    to: resources
+linux:
+  target: [AppImage, deb, rpm]
+  category: Development
+  icon: resources/icons
+  maintainer: Serhii <sr@ios.in.ua>
