@@ -395,7 +395,8 @@ export function App(): React.JSX.Element {
       </div>}
       {/* Kept mounted so a running tool action and its state survive switching tabs. */}
       <div hidden={tab !== 'tools'}>
-        <Tools disabled={busy || toolBusy || busyAction !== null} onBusy={setToolBusy} onLogStart={() => { setInstallLog([]) }} />
+        <Tools disabled={busy || toolBusy || busyAction !== null} onBusy={setToolBusy} onLogStart={() => { setInstallLog([]) }}
+          headroom={{ status: status.compressor, stats: status.stats }} />
       </div>
       {installLog.length > 0 && (
         <section className="card install">

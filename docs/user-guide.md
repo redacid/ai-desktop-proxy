@@ -154,6 +154,10 @@ appear in the Install log. Missing optional tools do not turn the proxy's health
   never changed. State is read from `~/.claude.json` (`mcpServers`) and `$CODEX_HOME/config.toml`
   (`mcp_servers`). uvx downloads the release on the client's next start.
 
+Hovering a card shows what the tool is for; **↗** next to its name opens the project's official page in the
+browser. The headroom card shows the service state and its lifetime savings with a 14-day chart; the Savings tab
+has the full detail.
+
 **Stop / Start / Remove from system.** RTK, Serena, MarkItDown, Ponytail and Chisle cards end with machine-wide
 buttons; each opens a confirmation that lists its commands, and the app checks the result afterwards.
 

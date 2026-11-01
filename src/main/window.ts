@@ -30,7 +30,8 @@ export function createMainWindow(isQuitting: () => boolean): BrowserWindow {
   })
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    // Only web pages; never file: or custom schemes that would launch local programs.
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
 

@@ -1,5 +1,34 @@
 import { useEffect, useState } from 'react'
-import type { ToolAction, ToolId, ToolInfo, ToolStats } from '@shared/ipc'
+import type { ComponentStatus, CompressorStats, ToolAction, ToolId, ToolInfo, ToolStats } from '@shared/ipc'
+
+/** What each tool is for (shown on hover) and its official page. Keyed by card, not by ToolId. */
+const ABOUT: Record<string, { what: string; url: string }> = {
+  headroom: { url: 'https://github.com/headroomlabs-ai/headroom',
+    what: 'Local proxy that compresses the context of API requests (tool output, history) before they reach the model, so each request costs fewer tokens.' },
+  rtk: { url: 'https://github.com/rtk-ai/rtk',
+    what: 'Rust Token Killer: hooks shell commands the agent runs and returns their output condensed, so command output fills less of the context.' },
+  serena: { url: 'https://github.com/oraios/serena',
+    what: 'MCP server with language-server code tools: find symbols, references and edit by symbol, instead of reading whole files.' },
+  markitdown: { url: 'https://github.com/microsoft/markitdown',
+    what: 'MCP server from Microsoft that converts PDF, Word, Excel, PowerPoint, HTML and more into Markdown the agent can read.' },
+  Ponytail: { url: 'https://github.com/DietrichGebert/ponytail',
+    what: 'Plugin that makes the agent work like a lazy senior developer: the smallest complete change, less code and shorter replies.' },
+  Chisle: { url: 'https://github.com/JayPokale/Chisle',
+    what: 'Plugin for terse, zero-fluff answers and YAGNI-first code; also trims oversized tool output.' }
+}
+
+/** Card title with its official page link; the whole card carries the description as a tooltip. */
+function Title({ name, about }: { name: string; about?: { what: string; url: string } }): React.JSX.Element {
+  return (
+    <strong className="tool-title">
+      {name}
+      {about && <a href={about.url} target="_blank" rel="noreferrer" title={`Official page: ${about.url}`} aria-label={`${name} official page`}>↗</a>}
+    </strong>
+  )
+}
+
+const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 })
+const usd = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
 
 const int = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 })
 
@@ -30,8 +59,10 @@ function Stats({ stats }: { stats: ToolStats }): React.JSX.Element {
   )
 }
 
-export function Tools({ disabled, onBusy, onLogStart }: {
+export function Tools({ disabled, onBusy, onLogStart, headroom }: {
   disabled: boolean
+  /** Live service state and savings for the headroom card. */
+  headroom: { status: ComponentStatus; stats: CompressorStats | null }
   onBusy: (busy: boolean) => void
   onLogStart: () => void
 }): React.JSX.Element {
@@ -133,9 +164,9 @@ export function Tools({ disabled, onBusy, onLogStart }: {
 
   /** One card per plugin with a row per client, whose switch installs or uninstalls it there. */
   const pluginCard = (name: string, group: ToolInfo[]): React.JSX.Element | null => group.length ? (
-    <article className="tool" key={name}>
+    <article className="tool" key={name} title={ABOUT[name]?.what}>
       <div className="client-main">
-        <strong>{name}</strong>
+        <Title name={name} about={ABOUT[name]} />
         {group[0].latest && <span className="badge">latest v{group[0].latest}</span>}
       </div>
       {group.map((t) => t.stats).find(Boolean) && <Stats stats={group.map((t) => t.stats).find(Boolean)!} />}
@@ -178,13 +209,26 @@ export function Tools({ disabled, onBusy, onLogStart }: {
       {!tools.length && <p className="detail">Checking tools…</p>}
       <div className="tool-grid">
         {tools.filter((t) => ['headroom', 'rtk', 'serena', 'markitdown'].includes(t.id)).map((tool) => (
-          <article className="tool" key={tool.id}>
+          <article className="tool" key={tool.id} title={ABOUT[tool.id]?.what}>
             <div className="client-main">
-              <strong>{tool.name}</strong>
+              <Title name={tool.name} about={ABOUT[tool.id]} />
               <span className={`badge ${tool.updateAvailable ? 'warn' : ''}`}>{version(tool)}</span>
             </div>
             <p className="detail">{tool.detail}</p>
             {tool.stats && <Stats stats={tool.stats} />}
+            {tool.id === 'headroom' && <>
+              <p className={`service ${headroom.status.health}`}><span className={`dot ${headroom.status.health}`} /> {headroom.status.detail}</p>
+              {headroom.stats && <Stats stats={{
+                source: 'headroom /stats-history; details on the Savings tab',
+                facts: [
+                  { label: 'tokens saved', value: compact.format(headroom.stats.lifetime.tokensSaved) },
+                  { label: 'saved by compression', value: usd.format(headroom.stats.lifetime.compressionSavingsUsd) },
+                  { label: 'saved by cache', value: usd.format(headroom.stats.lifetime.cacheSavingsUsd) },
+                  { label: 'requests', value: compact.format(headroom.stats.lifetime.requests) }
+                ],
+                daily: headroom.stats.daily.slice(-14).map((d) => ({ day: d.day, value: d.tokensSaved }))
+              }} />}
+            </>}
             {tool.latest && <p className="detail">Latest: {tool.latest}{tool.updateAvailable ? ' · update available' : ''}</p>}
             {notes(tool)}
             <div className="actions">
