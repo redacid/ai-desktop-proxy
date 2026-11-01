@@ -195,13 +195,16 @@ export function parsePonytailBand(csvs: string[]): ToolStats | null {
   }
 }
 
+export const CBM_LENS_PORT = 9749
+const CBM_LENS_URL = `http://127.0.0.1:${CBM_LENS_PORT}/`
+
 /** Where a tool serves its own web dashboard on this machine; only loopback, only probed, never started. */
 export function dashboardCandidates(id: ToolId, headroomUrl: string): string[] {
   if (id === 'headroom') return /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(headroomUrl) ? [`${headroomUrl}/dashboard`] : []
   // Serena takes the next free port from 24282 for each running server.
   if (id === 'serena') return Array.from({ length: 8 }, (_, i) => `http://127.0.0.1:${24282 + i}/dashboard/`)
-  // CBM Lens, when the daemon was started with its UI (`daemon start --open --port=9749`).
-  if (id === 'codebase-memory') return ['http://127.0.0.1:9749/']
+  // CBM Lens, when the daemon was started with its UI (the card's Dashboard switch does that).
+  if (id === 'codebase-memory') return [CBM_LENS_URL]
   return []
 }
 
@@ -493,7 +496,7 @@ export class ToolManager extends EventEmitter {
 
   /** Build reviewable commands before the confirmation dialog; this never installs anything. */
   async plan(id: ToolId, action: ToolAction): Promise<ToolPlan> {
-    if (!IDS.includes(id) || !['install', 'update', 'connect-claude', 'connect-codex', 'disconnect-claude', 'disconnect-codex', 'remove', 'stop', 'start', 'uninstall'].includes(action)) throw new Error('Unknown tool action')
+    if (!IDS.includes(id) || !['install', 'update', 'connect-claude', 'connect-codex', 'disconnect-claude', 'disconnect-codex', 'remove', 'stop', 'start', 'uninstall', 'dashboard-start', 'dashboard-stop'].includes(action)) throw new Error('Unknown tool action')
     await this.refresh()
     const info = this.tools.find((e) => e.id === id)!
     if (info.blocked) throw new Error(info.blocked)
@@ -502,6 +505,7 @@ export class ToolManager extends EventEmitter {
     const commands: Command[] = []
     const plan: ToolPlan = { id, action, commands, version: info.latest, detail: '' }
     if (action === 'stop' || action === 'start' || action === 'uninstall') return this.lifecyclePlan(info, action, plan)
+    if (action === 'dashboard-start' || action === 'dashboard-stop') return this.dashboardPlan(info, action, plan)
     if (npxKey(id)) return this.remotePlan(info, action, plan)
     const mcp = mcpKey(id)
     if (mcp) return this.mcpPlan(info, mcp, action, plan)
@@ -660,6 +664,26 @@ export class ToolManager extends EventEmitter {
   }
 
   /** Connect, disconnect or re-pin an npx-run MCP server with the clients' own `mcp add/remove` commands. */
+  /**
+   * CBM Lens: `daemon start/stop` of the same pinned build the clients run (CBM refuses a mixed build
+   * while sessions are active). The daemon outlives the command, so the app does not own its process.
+   */
+  private async dashboardPlan(info: ToolInfo, action: 'dashboard-start' | 'dashboard-stop', plan: ToolPlan): Promise<ToolPlan> {
+    if (info.id !== 'codebase-memory') throw new Error(`${info.name} has no dashboard the app can start`)
+    const npx = await this.find('npx')
+    if (!npx) throw new Error('Install Node.js (it provides npx) first')
+    const version = info.version ?? info.latest
+    if (!version) throw new Error('Check for updates successfully before starting the dashboard')
+    plan.version = version
+    const cbm = [npx, '-y', `${NPX_SERVERS['codebase-memory'].pkg}@${version}`]
+    plan.commands.push({ cmd: cbm[0], args: [...cbm.slice(1), 'daemon', ...(action === 'dashboard-start' ? ['start', `--port=${CBM_LENS_PORT}`] : ['stop'])] })
+    plan.detail = action === 'dashboard-start'
+      ? `Starts the Codebase Memory daemon with CBM Lens at ${CBM_LENS_URL}. It keeps running after the command, also for client sessions, until you stop it here or with \`codebase-memory-mcp daemon stop\`.`
+      : 'Stops the Codebase Memory daemon and CBM Lens. Open client sessions start their own daemon again when they need one.'
+    plan.detail += `\n\nCommands (executed without a shell):\n${plan.commands.map(formatCommand).join('\n')}`
+    return plan
+  }
+
   private async remotePlan(info: ToolInfo, action: ToolAction, plan: ToolPlan): Promise<ToolPlan> {
     const { pkg } = NPX_SERVERS[npxKey(info.id)!]
     const npx = (await this.find('npx'))!
@@ -771,6 +795,16 @@ export class ToolManager extends EventEmitter {
     if (plan.action === 'stop' && (pluginKey(plan.id) ? group.some((t) => t.id.endsWith('-claude') && t.enabled) : ours(info))) throw new Error(`Commands completed, but ${info.name} is still active.`)
     if (plan.action === 'start' && group.some((t) => t.id.endsWith('-claude') && t.installed && !t.enabled)) throw new Error(`Commands completed, but ${info.name} is still disabled.`)
     if (plan.action === 'uninstall' && (pluginKey(plan.id) ? group.some((t) => t.installed) : plan.id === 'rtk' ? await this.rtkBinary() === this.binary || ours(info) : ours(info))) throw new Error(`Commands completed, but ${info.name} is still present.`)
+    if (plan.action === 'dashboard-start' || plan.action === 'dashboard-stop') {
+      const want = plan.action === 'dashboard-start'
+      // The daemon binds its UI port a moment after `daemon start` returns.
+      for (let i = 0; i < 20 && !!info.dashboards?.length !== want; i++) {
+        await new Promise((r) => setTimeout(r, 500))
+        await this.refresh()
+        Object.assign(info, this.tools.find((e) => e.id === plan.id))
+      }
+      if (!!info.dashboards?.length !== want) throw new Error(`Command completed, but CBM Lens is ${want ? 'not answering' : 'still answering'} at ${CBM_LENS_URL}.`)
+    }
     if (plan.action === 'remove' && info.installed !== false) throw new Error(`Command completed, but ${info.name} is still listed as installed. ${info.error ?? 'Check the client plugin manager.'}`)
     if (plan.action.startsWith('disconnect-') && info.connected?.[client] !== false) throw new Error(`Command completed, but ${info.name} still shows as connected to ${client === 'codex' ? 'Codex' : 'Claude Code'}.`)
     if (npxKey(plan.id) && plan.action.startsWith('connect-') && info.version !== plan.version) throw new Error(`Command completed, but ${info.name} ${plan.version} is not registered in ${client === 'codex' ? 'Codex' : 'Claude Code'}.`)

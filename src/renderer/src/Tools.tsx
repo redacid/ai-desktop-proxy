@@ -228,6 +228,17 @@ export function Tools({ disabled, onBusy, onLogStart, headroom }: {
                 ))}
               </p>
             ) : null}
+            {tool.id === 'codebase-memory' && tool.installed === true && (
+              <ul className="clients">
+                <Row name="Dashboard (CBM Lens)" on={!!tool.dashboards?.length}
+                  badge={tool.dashboards?.length ? 'running' : 'stopped'}
+                  canToggle={!tool.blocked && !!(tool.version ?? tool.latest)}
+                  title={tool.dashboards?.length ? 'Stop the Codebase Memory daemon and its dashboard' : 'Start the Codebase Memory daemon with its dashboard'}
+                  onToggle={(on) => void act(tool.id, on ? 'dashboard-start' : 'dashboard-stop')}>
+                  <p className="detail">Runs the shared daemon with the CBM Lens web UI on port 9749.</p>
+                </Row>
+              </ul>
+            )}
             {tool.stats && <Stats stats={tool.stats} />}
             {tool.id === 'headroom' && <>
               <p className={`service ${headroom.status.health}`}><span className={`dot ${headroom.status.health}`} /> {headroom.status.detail}</p>

@@ -157,8 +157,10 @@ appear in the Install log. Missing optional tools do not turn the proxy's health
 **Open dashboard ↗** appears on a card while the tool's own web dashboard answers on this machine: headroom at
 `<headroom URL>/dashboard`, Serena at `http://127.0.0.1:24282/dashboard/` (each running Serena takes the next port,
 so there can be several links), and Codebase Memory's CBM Lens at `http://127.0.0.1:9749/` when its daemon runs
-with the UI (`codebase-memory-mcp daemon start --open --port=9749`). The app only checks these addresses with the
-presence check; it never starts a dashboard. RTK's dashboard (`rtk gain --watch`) is terminal-only, and the other
+with the UI. The app checks these addresses with the presence check. Only CBM Lens can be started from the app:
+the Codebase Memory card has a **Dashboard (CBM Lens)** switch that runs `npx -y codebase-memory-mcp@<version>
+daemon start --port=9749` (off: `daemon stop`) with the same pinned build the clients use, after a confirmation.
+The daemon keeps running when the app quits, and client sessions share it while it runs. RTK's dashboard (`rtk gain --watch`) is terminal-only, and the other
 tools have none.
 
 Hovering a card shows what the tool is for; **↗** next to its name opens the project's official page in the

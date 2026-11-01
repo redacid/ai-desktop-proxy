@@ -56,6 +56,10 @@ async function fixture() {
     if (args[1] === 'disable' || args[1] === 'enable') { state.ponyEnabled = args[1] === 'enable'; return 0 }
     if (args[1] === 'marketplace' && args[2] === 'remove') { state.marketplace = false; return 0 }
     if (args[0] === 'mcp' || args[0] === 'cache') return 0
+    if (args.includes('daemon')) {
+      state.dashboards = args.includes('start') ? ['http://127.0.0.1:9749/'] : []
+      return 0
+    }
     if (args[1] === 'uninstall' || args[1] === 'remove') { state.ponyInstalled = state.codexInstalled = false; return 0 }
     if (cmd.endsWith('uv')) { state.headroomVersion = '0.41.0'; state.missingHeadroom = false }
     if (cmd.endsWith('claude')) { state.ponyInstalled = true; state.ponyVersion = '5.4.0' }
@@ -554,5 +558,20 @@ describe('dashboards', () => {
     expect(tools.find((t) => t.id === 'headroom')!.dashboards).toEqual(['http://127.0.0.1:6767/dashboard'])
     expect(tools.find((t) => t.id === 'serena')!.dashboards).toEqual(['http://127.0.0.1:24283/dashboard/'])
     expect(tools.find((t) => t.id === 'codebase-memory')!.dashboards).toBeUndefined()
+  })
+})
+
+describe('CBM Lens', () => {
+  it('starts and stops the daemon of the pinned build and confirms the dashboard answers', async () => {
+    const f = await fixture()
+    const start = await f.manager.plan('codebase-memory', 'dashboard-start')
+    expect(start.commands).toEqual([{ cmd: '/fake/npx', args: ['-y', 'codebase-memory-mcp@5.4.0', 'daemon', 'start', '--port=9749'] }])
+    await f.manager.execute(start, () => {})
+    expect(f.manager.current.find((t) => t.id === 'codebase-memory')!.dashboards).toEqual(['http://127.0.0.1:9749/'])
+    const stop = await f.manager.plan('codebase-memory', 'dashboard-stop')
+    expect(stop.commands[0].args.slice(-2)).toEqual(['daemon', 'stop'])
+    await f.manager.execute(stop, () => {})
+    expect(f.manager.current.find((t) => t.id === 'codebase-memory')!.dashboards).toBeUndefined()
+    await expect(f.manager.plan('serena', 'dashboard-start')).rejects.toThrow(/no dashboard/)
   })
 })

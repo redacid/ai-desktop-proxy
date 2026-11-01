@@ -110,7 +110,7 @@ export type CompressorAction = 'install' | 'setup' | 'start' | 'stop' | 'restart
 export type ToolId = 'headroom' | 'rtk' | 'ponytail-claude' | 'ponytail-codex' | 'chisle-claude' | 'serena' | 'markitdown' | 'context7' | 'codebase-memory'
 /** remove = one client's plugin; stop/start/uninstall = the whole tool on this machine. */
 export type ToolAction = 'install' | 'update' | 'connect-claude' | 'connect-codex' | 'disconnect-claude' | 'disconnect-codex' | 'remove'
-  | 'stop' | 'start' | 'uninstall'
+  | 'stop' | 'start' | 'uninstall' | 'dashboard-start' | 'dashboard-stop'
 
 export interface ToolInfo {
   id: ToolId
