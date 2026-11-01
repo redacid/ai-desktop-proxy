@@ -5,7 +5,7 @@
 Run this as your desktop user (not root, and do not pipe into `sudo bash`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/feat/electron-app/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/main/install.sh | bash
 ```
 
 Supported: Linux x86_64 desktops with systemd and apt-get (Debian/Ubuntu), dnf (Fedora/RHEL), or zypper
@@ -34,7 +34,7 @@ and existing working tools are kept. Installed builds can subsequently update fr
 For download-and-review installation:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/feat/electron-app/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/main/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```

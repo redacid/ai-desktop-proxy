@@ -32,7 +32,7 @@ What the app does:
 On a Linux x64 desktop with systemd (Debian/Ubuntu, Fedora/RHEL or openSUSE), run as your normal user:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/feat/electron-app/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/main/install.sh | bash
 ```
 
 The installer downloads the latest stable GitHub Release, verifies its SHA-256 checksum, and installs the deb/rpm
@@ -43,7 +43,7 @@ from the applications menu, set up the Proxy and Compressor services, then enabl
 Releases must provide `SHA256SUMS` or a SHA-256 asset digest through GitHub. To inspect the installer first:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/feat/electron-app/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/main/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```

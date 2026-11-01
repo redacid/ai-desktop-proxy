@@ -183,7 +183,7 @@ and a development build cannot validate administrator authentication or distribu
 
 ## Bootstrap installer
 
-The root `install.sh` is a standalone Bash script served directly from the maintained `feat/electron-app` branch.
+The root `install.sh` is a standalone Bash script served only from the `main` branch after changes have been merged.
 It supports `curl | bash` without a checkout or npm build. It only runs package-manager commands as root; uv,
 mitmproxy and headroom belong to the invoking desktop user. The release workflow uploads `SHA256SUMS` alongside
 the packages and update metadata. The installer validates release names, URLs, package identity/version and SHA-256
