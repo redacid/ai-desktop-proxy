@@ -169,6 +169,13 @@ buttons; each opens a confirmation that lists its commands, and the app checks t
 
 Registrations or marketplaces set up outside the app are never touched.
 
+- **Context7:** an MCP server that fetches current library documentation. The app runs it locally with npx from a
+  pinned npm release (`claude mcp add --scope user context7 -- npx -y @upstash/context7-mcp@<version>`, the same
+  with `codex mcp add`), so it needs Node.js 20.18+; it still queries context7.com for the documentation itself.
+  **Update** re-pins the clients the app connected. If Claude Code already has the official `context7` plugin (a
+  remote server), its row shows **set up elsewhere**. **Stop** removes the app's registrations; there is nothing
+  else to remove.
+
 Each card also shows what the tool achieved, refreshed with the presence check:
 
 - **RTK:** tokens saved, average saving and commands filtered, plus tokens saved per day for the last 14 days,
@@ -183,7 +190,8 @@ Each card also shows what the tool achieved, refreshed with the presence check:
   and how many outputs it compressed, from `~/.claude/.chisle-compress-stats.json`.
 - **Serena, MarkItDown:** none; Serena keeps its tool-usage statistics only in a running server's dashboard.
 
-Version sources are PyPI (`headroom-ai`, `serena-agent`, `markitdown-mcp`), GitHub Releases (`rtk-ai/rtk`), and
+Version sources are PyPI (`headroom-ai`, `serena-agent`, `markitdown-mcp`), npm (`@upstash/context7-mcp`), GitHub
+Releases (`rtk-ai/rtk`), and
 the official Ponytail and Chisle plugin manifests. GitHub rate limits, an offline machine, or unsupported client CLI output can prevent a check;
 the error is shown without attempting an installation. After a partial native-command failure, review
 the log: earlier steps may already have completed. Tool versions and installation paths are distinct

@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CompressorInfo } from '@shared/ipc'
-import { approveToolAction, binaryVersion, extractRtk, newerVersion, officialSource, mcpPin, parseChisleStats, parsePonytailBand, parsePonytailGain, parseRtkGain, rtkConnected, pluginInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
+import { approveToolAction, binaryVersion, extractRtk, newerVersion, officialSource, mcpPin, npxPin, parseChisleStats, parsePonytailBand, parsePonytailGain, parseRtkGain, rtkConnected, pluginInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
 
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))) })
@@ -130,18 +130,18 @@ describe('tool detection and update cadence', () => {
     expect(f.setup).not.toHaveBeenCalled()
   })
 
-  // Six update sources: headroom, RTK, Ponytail, Chisle, Serena, MarkItDown.
+  // Seven update sources: headroom, RTK, Ponytail, Chisle, Serena, MarkItDown, Context7.
   it('throttles network checks, shares in-flight work, and supports a forced check', async () => {
     const f = await fixture()
     await Promise.all([f.manager.refresh(), f.manager.refresh()])
-    expect(f.request).toHaveBeenCalledTimes(6)
+    expect(f.request).toHaveBeenCalledTimes(7)
     await f.manager.refresh()
-    expect(f.request).toHaveBeenCalledTimes(6)
+    expect(f.request).toHaveBeenCalledTimes(7)
     f.state.now += UPDATE_INTERVAL_MS
     await f.manager.refresh()
-    expect(f.request).toHaveBeenCalledTimes(12)
+    expect(f.request).toHaveBeenCalledTimes(14)
     await f.manager.refresh(true)
-    expect(f.request).toHaveBeenCalledTimes(18)
+    expect(f.request).toHaveBeenCalledTimes(21)
     expect(f.stream).not.toHaveBeenCalled()
   })
 
@@ -149,7 +149,7 @@ describe('tool detection and update cadence', () => {
     const f = await fixture()
     await f.manager.refresh()
     const restarted = new ToolManager(f.deps)
-    try { await restarted.start(); expect(f.request).toHaveBeenCalledTimes(6) }
+    try { await restarted.start(); expect(f.request).toHaveBeenCalledTimes(7) }
     finally { restarted.stop() }
   })
 
@@ -160,7 +160,7 @@ describe('tool detection and update cadence', () => {
     const tools = await f.manager.refresh(true)
     expect(tools[0]).toMatchObject({ installed: true, latest: '0.41.0', error: expect.stringContaining('offline') })
     await f.manager.refresh()
-    expect(f.request).toHaveBeenCalledTimes(12)
+    expect(f.request).toHaveBeenCalledTimes(14)
   })
 
   it('does not offer installation on a detection failure', async () => {
@@ -521,5 +521,22 @@ describe('stop, start and remove from system', () => {
     expect((await f.manager.plan('serena', 'stop')).commands).toEqual([{ cmd: '/fake/claude', args: ['mcp', 'remove', '--scope', 'user', 'serena'] }])
     expect((await f.manager.plan('serena', 'uninstall')).commands.at(-1)).toEqual({ cmd: '/fake/uv', args: ['cache', 'clean', 'serena-agent'] })
     await expect(f.manager.plan('serena', 'start')).rejects.toThrow(/switch/)
+  })
+})
+
+describe('Context7', () => {
+  it('runs locally from a pinned npm release and treats the official plugin as set up elsewhere', async () => {
+    const f = await fixture()
+    const ctx = (await f.manager.refresh(true)).find((t) => t.id === 'context7')!
+    expect(ctx).toMatchObject({ installed: true, version: null, connected: { claude: false, codex: false } })
+    const plan = await f.manager.plan('context7', 'connect-codex')
+    expect(plan.commands).toEqual([{ cmd: '/fake/codex', args: ['mcp', 'add', 'context7', '--', '/fake/npx', '-y', '@upstash/context7-mcp@5.4.0'] }])
+    await expect(f.manager.plan('context7', 'uninstall')).rejects.toThrow(/Stop/)
+  })
+
+  it('recognizes only its own npx pin', () => {
+    expect(npxPin({ command: '/usr/bin/npx', args: ['-y', '@upstash/context7-mcp@4.4.4'] }, '@upstash/context7-mcp')).toBe('4.4.4')
+    expect(npxPin({ command: 'npx', args: ['-y', '@upstash/context7-mcp@latest'] }, '@upstash/context7-mcp')).toBeNull()
+    expect(npxPin({ type: 'http', url: 'https://mcp.context7.com/mcp' }, '@upstash/context7-mcp')).toBeNull()
   })
 })

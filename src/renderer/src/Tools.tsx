@@ -9,6 +9,8 @@ const ABOUT: Record<string, { what: string; url: string }> = {
     what: 'Rust Token Killer: hooks shell commands the agent runs and returns their output condensed, so command output fills less of the context.' },
   serena: { url: 'https://github.com/oraios/serena',
     what: 'MCP server with language-server code tools: find symbols, references and edit by symbol, instead of reading whole files.' },
+  context7: { url: 'https://context7.com',
+    what: 'MCP server from Upstash that fetches current, version-specific documentation and code examples for libraries, so the agent does not rely on outdated training data.' },
   markitdown: { url: 'https://github.com/microsoft/markitdown',
     what: 'MCP server from Microsoft that converts PDF, Word, Excel, PowerPoint, HTML and more into Markdown the agent can read.' },
   Ponytail: { url: 'https://github.com/DietrichGebert/ponytail',
@@ -208,7 +210,7 @@ export function Tools({ disabled, onBusy, onLogStart, headroom }: {
       {error && <p className="error-inline" role="alert">{error}</p>}
       {!tools.length && <p className="detail">Checking tools…</p>}
       <div className="tool-grid">
-        {tools.filter((t) => ['headroom', 'rtk', 'serena', 'markitdown'].includes(t.id)).map((tool) => (
+        {tools.filter((t) => ['headroom', 'rtk', 'serena', 'markitdown', 'context7'].includes(t.id)).map((tool) => (
           <article className="tool" key={tool.id} title={ABOUT[tool.id]?.what}>
             <div className="client-main">
               <Title name={tool.name} about={ABOUT[tool.id]} />
@@ -236,7 +238,7 @@ export function Tools({ disabled, onBusy, onLogStart, headroom }: {
               {updateButton(tool)}
             </div>
             {tool.installed === true && tool.connected && connectionRows(tool)}
-            {tool.id !== 'headroom' && tool.installed === true && lifecycle(tool.id, { stop: ours(tool), remove: true })}
+            {tool.id !== 'headroom' && tool.installed === true && lifecycle(tool.id, { stop: ours(tool), remove: tool.id !== 'context7' })}
             {checked(tool)}
           </article>
         ))}

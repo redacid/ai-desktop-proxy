@@ -10,10 +10,10 @@ import { parse as parseToml } from 'smol-toml'
 import { writeJsonAtomic } from '../fsutil'
 import { HEADROOM_PACKAGE, HEADROOM_PYTHON } from '../compressors/headroom-service'
 
-const IDS: ToolId[] = ['headroom', 'rtk', 'ponytail-claude', 'ponytail-codex', 'chisle-claude', 'serena', 'markitdown']
+const IDS: ToolId[] = ['headroom', 'rtk', 'ponytail-claude', 'ponytail-codex', 'chisle-claude', 'serena', 'markitdown', 'context7']
 const NAMES: Record<ToolId, string> = {
   headroom: 'headroom', rtk: 'RTK', 'ponytail-claude': 'Ponytail · Claude Code', 'ponytail-codex': 'Ponytail · Codex',
-  'chisle-claude': 'Chisle · Claude Code', serena: 'Serena', markitdown: 'MarkItDown'
+  'chisle-claude': 'Chisle · Claude Code', serena: 'Serena', markitdown: 'MarkItDown', context7: 'Context7'
 }
 export const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000
 const PRESENCE_INTERVAL_MS = 60_000
@@ -36,12 +36,16 @@ export const MCP_SERVERS = {
   markitdown: { pkg: 'markitdown-mcp', uv: ['--prerelease', 'if-necessary-or-explicit', '--with', 'azure-ai-contentunderstanding>=1.2.0b1'], args: () => ['markitdown-mcp'] }
 } as const
 type McpKey = keyof typeof MCP_SERVERS
+/** Context7's MCP server, run locally by npx from a pinned npm release; it still queries context7.com for docs. */
+export const CONTEXT7_PKG = '@upstash/context7-mcp'
+// The official Claude Code plugin that serves the same server remotely.
+const CONTEXT7_PLUGIN = 'context7@claude-plugins-official'
 const mcpKey = (id: ToolId): McpKey | null => id === 'serena' || id === 'markitdown' ? id : null
 const MCP_PYTHON = '3.13'
 // PyPI versions incl. pre-releases (markitdown-mcp has only alphas); never anything an argument could abuse.
 const pypiVersion = (v: unknown): string | null => typeof v === 'string' && /^\d+(\.\d+)*([a-z]+\d+)?$/.test(v) ? v : null
-type UpdateKey = 'headroom' | 'rtk' | PluginKey | McpKey
-const UPDATE_KEYS: UpdateKey[] = ['headroom', 'rtk', 'ponytail', 'chisle', 'serena', 'markitdown']
+type UpdateKey = 'headroom' | 'rtk' | PluginKey | McpKey | 'context7'
+const UPDATE_KEYS: UpdateKey[] = ['headroom', 'rtk', 'ponytail', 'chisle', 'serena', 'markitdown', 'context7']
 const updateKey = (id: ToolId): UpdateKey => pluginKey(id) ?? id as UpdateKey
 
 type Json = Record<string, unknown>
@@ -90,6 +94,15 @@ export function mcpPin(entry: unknown, pkg: string): string | null {
   const spec = from >= 0 ? args[from + 1] : null
   if (typeof e.command !== 'string' || !/(^|\/)uvx$/.test(e.command) || typeof spec !== 'string' || !spec.startsWith(`${pkg}==`)) return null
   return pypiVersion(spec.slice(pkg.length + 2))
+}
+
+/** A Context7 entry registered by this app: npx running `@upstash/context7-mcp@<version>`. */
+export function npxPin(entry: unknown, pkg: string): string | null {
+  const e = object(entry)
+  const args = Array.isArray(e.args) ? e.args : []
+  if (typeof e.command !== 'string' || !/(^|\/)npx$/.test(e.command)) return null
+  const spec = args.find((a): a is string => typeof a === 'string' && a.startsWith(`${pkg}@`))
+  return spec ? releaseVersion(spec.slice(pkg.length + 1)) : null
 }
 
 /** chisle's compress-output hook ledger: characters it elided from tool output. */
@@ -283,10 +296,12 @@ export class ToolManager extends EventEmitter {
     const url = key === 'headroom' ? 'https://pypi.org/pypi/headroom-ai/json'
       : key === 'rtk' ? 'https://api.github.com/repos/rtk-ai/rtk/releases/latest'
       : mcp ? `https://pypi.org/pypi/${mcp.pkg}/json`
+      : key === 'context7' ? `https://registry.npmjs.org/${CONTEXT7_PKG}/latest`
       : `https://raw.githubusercontent.com/${PLUGINS[key as PluginKey].repo}/main/.claude-plugin/plugin.json`
     const raw = object(JSON.parse((await this.response(url, 8 * 1024 * 1024)).toString('utf8')))
     const version = mcp ? pypiVersion(object(raw.info).version)
       : releaseVersion(key === 'headroom' ? object(raw.info).version : key === 'rtk' ? raw.tag_name : raw.version)
+    // shortcut: npm `latest` can be a pre-release tag; releaseVersion rejects those, so such a check reports an error.
     if (!version || (key === 'rtk' && (raw.draft === true || raw.prerelease === true))) throw new Error('No stable version in update source')
     return version
   }
@@ -303,7 +318,7 @@ export class ToolManager extends EventEmitter {
     try { await writeJsonAtomic(this.cacheFile, this.updates) }
     catch (err) { for (const e of Object.values(this.updates)) e.error ??= `Cannot save update cache: ${(err as Error).message}` }
     this.tools = await Promise.all(IDS.map(async (id): Promise<ToolInfo> => {
-      const update = this.updates[updateKey(id)]
+      const update = this.updates[updateKey(id)] ?? emptyUpdate()
       const info: ToolInfo = { id, name: NAMES[id], installed: null, version: null, latest: update.latest,
         updateAvailable: false, checkedAt: update.checkedAt, error: update.error, blocked: null, detail: '', stats: null }
       try {
@@ -323,6 +338,8 @@ export class ToolManager extends EventEmitter {
           if (!['x64', 'arm64'].includes(this.deps.arch ?? process.arch)) info.blocked = 'RTK binary installation supports Linux x64 and arm64.'
           info.detail = binary === this.binary ? 'App-managed binary. Connect it to each client below.'
             : binary ? `Found at ${binary}. Updates install a separate app-managed copy.` : 'Reduces command output before the agent reads it.'
+        } else if (id === 'context7') {
+          await this.detectRemote(info)
         } else if (mcpKey(id)) {
           await this.detectMcp(info, MCP_SERVERS[mcpKey(id)!].pkg)
         } else {
@@ -342,7 +359,7 @@ export class ToolManager extends EventEmitter {
               : `Install the official ${PLUGINS[key].name} plugin for this client.`
           }
         }
-        info.updateAvailable = info.installed === true && (mcpKey(id)
+        info.updateAvailable = info.installed === true && (mcpKey(id) || id === 'context7'
           ? !!info.version && !!info.latest && info.version !== info.latest
           : newerVersion(info.latest, info.version))
       } catch (err) { info.error = [info.error, `Detection failed: ${(err as Error).message}`].filter(Boolean).join('\n'); info.blocked = 'Resolve the detection error before changing this tool.' }
@@ -375,19 +392,43 @@ export class ToolManager extends EventEmitter {
     const uvx = await this.find('uvx')
     info.installed = !!uvx
     if (!uvx) { info.blocked = 'Install uv first: https://docs.astral.sh/uv/'; info.detail = 'Runs with uvx from PyPI.'; return }
-    const claudeJson = join(this.deps.home, '.claude.json')
-    const codexToml = join(this.deps.codexHome ?? join(this.deps.home, '.codex'), 'config.toml')
-    const read = async (file: string, parse: (text: string) => unknown, key: string): Promise<unknown> => {
-      const text = await fs.readFile(file, 'utf8').catch((err) => { if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null; throw err })
-      return text === null ? undefined : object(object(parse(text))[key])[info.id]
-    }
-    const entries = { claude: await read(claudeJson, JSON.parse, 'mcpServers'), codex: await read(codexToml, parseToml, 'mcp_servers') }
+    const entries = await this.mcpEntries(info.id)
     const pins = { claude: mcpPin(entries.claude, pkg), codex: mcpPin(entries.codex, pkg) }
     info.connected = { claude: entries.claude !== undefined, codex: entries.codex !== undefined }
     info.foreign = { claude: entries.claude !== undefined && !pins.claude, codex: entries.codex !== undefined && !pins.codex }
     info.version = pins.claude ?? pins.codex
     info.detail = `MCP server, run with uvx from PyPI ${pkg}${info.version ? `==${info.version}` : ''} at user scope. Restart the client after changes.`
     if (info.foreign.claude || info.foreign.codex) info.detail += ' A server with this name set up outside the app is left as it is.'
+  }
+
+  /** The `name` MCP server entry in Claude Code's user config and in Codex's config.toml (undefined = none). */
+  private async mcpEntries(name: string): Promise<{ claude: unknown; codex: unknown }> {
+    const read = async (file: string, parse: (text: string) => unknown, key: string): Promise<unknown> => {
+      const text = await fs.readFile(file, 'utf8').catch((err) => { if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null; throw err })
+      return text === null ? undefined : object(object(parse(text))[key])[name]
+    }
+    return {
+      claude: await read(join(this.deps.home, '.claude.json'), JSON.parse, 'mcpServers'),
+      codex: await read(join(this.deps.codexHome ?? join(this.deps.home, '.codex'), 'config.toml'), parseToml, 'mcp_servers')
+    }
+  }
+
+  /** Context7: ours when npx runs our pinned package; the official Claude Code plugin counts as set up elsewhere. */
+  private async detectRemote(info: ToolInfo): Promise<void> {
+    const npx = await this.find('npx')
+    info.installed = !!npx
+    if (!npx) { info.blocked = 'Install Node.js 20.18 or newer (it provides npx) first.'; info.detail = 'Runs locally with npx from npm.'; return }
+    const entries = await this.mcpEntries(info.id)
+    const ours = (e: unknown): boolean => !!npxPin(e, CONTEXT7_PKG)
+    info.version = npxPin(entries.claude, CONTEXT7_PKG) ?? npxPin(entries.codex, CONTEXT7_PKG)
+    const claudeCli = await this.find('claude')
+    const list = claudeCli ? await this.runner(claudeCli, ['plugin', 'list', '--json']) : null
+    let viaPlugin = false
+    try { viaPlugin = !!list && list.code === 0 && pluginInfo(JSON.parse(list.stdout), false, CONTEXT7_PLUGIN).enabled } catch { /* unknown plugin list: no plugin */ }
+    info.connected = { claude: entries.claude !== undefined || viaPlugin, codex: entries.codex !== undefined }
+    info.foreign = { claude: (entries.claude !== undefined && !ours(entries.claude)) || (entries.claude === undefined && viaPlugin), codex: entries.codex !== undefined && !ours(entries.codex) }
+    info.detail = `MCP server run locally by npx from ${CONTEXT7_PKG}${info.version ? `@${info.version}` : ''}; it fetches docs from context7.com. Restart the client after changes.`
+    if (viaPlugin) info.detail += ' Claude Code already has it from the official context7 plugin (remote).'
   }
 
   private async chisleStats(): Promise<ToolStats | null> {
@@ -421,6 +462,7 @@ export class ToolManager extends EventEmitter {
     const commands: Command[] = []
     const plan: ToolPlan = { id, action, commands, version: info.latest, detail: '' }
     if (action === 'stop' || action === 'start' || action === 'uninstall') return this.lifecyclePlan(info, action, plan)
+    if (id === 'context7') return this.remotePlan(info, action, plan)
     const mcp = mcpKey(id)
     if (mcp) return this.mcpPlan(info, mcp, action, plan)
     if (action.startsWith('disconnect-')) {
@@ -514,7 +556,7 @@ export class ToolManager extends EventEmitter {
     }
     const notes: string[] = []
     const key = pluginKey(info.id)
-    const mcp = mcpKey(info.id)
+    const mcp = mcpKey(info.id) ?? (info.id === 'context7' ? 'context7' : null)
     if (info.id === 'rtk') {
       if (action === 'start') throw new Error('Connect RTK to a client with its switch')
       const binary = await this.rtkBinary()
@@ -559,7 +601,8 @@ export class ToolManager extends EventEmitter {
         plan.commands.push({ cmd: await cli(c), args: c === 'codex' ? ['mcp', 'remove', info.id] : ['mcp', 'remove', '--scope', 'user', info.id] })
       }
       if (clients.some((c) => info.foreign?.[c])) notes.push(`${info.name} set up outside this app is left alone.`)
-      if (action === 'uninstall') {
+      if (action === 'uninstall' && mcp === 'context7') throw new Error('Context7 has no files of its own outside the npx cache; use Stop to remove it from every client')
+      if (action === 'uninstall' && mcp !== 'context7') {
         const uv = await this.find('uv')
         if (uv) plan.commands.push({ cmd: uv, args: ['cache', 'clean', MCP_SERVERS[mcp].pkg] })
         notes.unshift(`Removes ${info.name} from every client and clears its packages from the uv cache.`)
@@ -573,6 +616,44 @@ export class ToolManager extends EventEmitter {
 
   private async ownsRtkLink(): Promise<boolean> {
     try { return (await fs.lstat(this.rtkLink)).isSymbolicLink() && await fs.readlink(this.rtkLink) === this.binary } catch { return false }
+  }
+
+  /** Connect, disconnect or re-pin the local Context7 server with the clients' own `mcp add/remove` commands. */
+  private async remotePlan(info: ToolInfo, action: ToolAction, plan: ToolPlan): Promise<ToolPlan> {
+    const npx = (await this.find('npx'))!
+    const name = info.id
+    const label = (c: 'claude' | 'codex'): string => c === 'codex' ? 'Codex' : 'Claude Code'
+    const cli = async (c: 'claude' | 'codex'): Promise<string> => {
+      const found = await this.find(c)
+      if (!found) throw new Error(`Install ${label(c)} first`)
+      return found
+    }
+    const add = async (c: 'claude' | 'codex', version: string): Promise<Command> => {
+      const server = [npx, '-y', `${CONTEXT7_PKG}@${version}`]
+      return { cmd: await cli(c), args: c === 'codex' ? ['mcp', 'add', name, '--', ...server] : ['mcp', 'add', '--scope', 'user', name, '--', ...server] }
+    }
+    const remove = async (c: 'claude' | 'codex'): Promise<Command> =>
+      ({ cmd: await cli(c), args: c === 'codex' ? ['mcp', 'remove', name] : ['mcp', 'remove', '--scope', 'user', name] })
+    if (action === 'update') {
+      const ours = (['claude', 'codex'] as const).filter((c) => info.connected?.[c] && !info.foreign?.[c])
+      for (const c of ours) plan.commands.push(await remove(c), await add(c, plan.version!))
+      plan.detail = `Re-registers Context7 with ${CONTEXT7_PKG}@${plan.version} in ${ours.map(label).join(' and ')}; npx downloads it on the next client start.`
+    } else if (action.startsWith('connect-') || action.startsWith('disconnect-')) {
+      const client = action.endsWith('-codex') ? 'codex' : 'claude'
+      if (info.foreign?.[client]) throw new Error(`${label(client)} already has Context7 set up outside this app (an MCP server or the official plugin); change it there`)
+      if (action.startsWith('connect-')) {
+        const version = info.version ?? plan.version
+        if (!version) throw new Error('Check for updates successfully before adding Context7')
+        plan.version = version
+        plan.commands.push(await add(client, version))
+        plan.detail = `Registers the Context7 MCP server (${CONTEXT7_PKG}@${version}, run locally by npx) in ${label(client)} at user scope. It still fetches documentation from context7.com.`
+      } else {
+        plan.commands.push(await remove(client))
+        plan.detail = `Removes the Context7 MCP server from ${label(client)}.`
+      }
+    } else throw new Error(`${info.name} is switched per client; it has nothing to install`)
+    plan.detail += ` Restart the client afterward.\n\nCommands (executed without a shell):\n${plan.commands.map(formatCommand).join('\n')}`
+    return plan
   }
 
   /** Connect, disconnect or re-pin an MCP server with the clients' own `mcp add/remove` commands. */
@@ -650,8 +731,9 @@ export class ToolManager extends EventEmitter {
     if (plan.action === 'uninstall' && (pluginKey(plan.id) ? group.some((t) => t.installed) : plan.id === 'rtk' ? await this.rtkBinary() === this.binary || ours(info) : ours(info))) throw new Error(`Commands completed, but ${info.name} is still present.`)
     if (plan.action === 'remove' && info.installed !== false) throw new Error(`Command completed, but ${info.name} is still listed as installed. ${info.error ?? 'Check the client plugin manager.'}`)
     if (plan.action.startsWith('disconnect-') && info.connected?.[client] !== false) throw new Error(`Command completed, but ${info.name} still shows as connected to ${client === 'codex' ? 'Codex' : 'Claude Code'}.`)
+    if (plan.id === 'context7' && plan.action.startsWith('connect-') && info.version !== plan.version) throw new Error(`Command completed, but Context7 ${plan.version} is not registered in ${client === 'codex' ? 'Codex' : 'Claude Code'}.`)
     if (mcpKey(plan.id) && plan.action.startsWith('connect-') && info.version !== plan.version) throw new Error(`Command completed, but ${info.name} ${plan.version} is not registered in ${client === 'codex' ? 'Codex' : 'Claude Code'}.`)
-    if ((plan.action === 'install' || plan.action === 'update') && (info.installed !== true || !info.version || (plan.version && (mcpKey(plan.id) ? info.version !== plan.version : newerVersion(plan.version, info.version))))) {
+    if ((plan.action === 'install' || plan.action === 'update') && (info.installed !== true || !info.version || (plan.version && (mcpKey(plan.id) || plan.id === 'context7' ? info.version !== plan.version : newerVersion(plan.version, info.version))))) {
       throw new Error(`Command completed, but ${info.name} ${plan.version ?? ''} could not be verified. ${info.error ?? 'Check the client plugin manager.'}`)
     }
     log('Done. Restart client sessions to apply hook or plugin changes.')
