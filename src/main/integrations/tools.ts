@@ -195,6 +195,24 @@ export function parsePonytailBand(csvs: string[]): ToolStats | null {
   }
 }
 
+/** Where a tool serves its own web dashboard on this machine; only loopback, only probed, never started. */
+export function dashboardCandidates(id: ToolId, headroomUrl: string): string[] {
+  if (id === 'headroom') return /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(headroomUrl) ? [`${headroomUrl}/dashboard`] : []
+  // Serena takes the next free port from 24282 for each running server.
+  if (id === 'serena') return Array.from({ length: 8 }, (_, i) => `http://127.0.0.1:${24282 + i}/dashboard/`)
+  // CBM Lens, when the daemon was started with its UI (`daemon start --open --port=9749`).
+  if (id === 'codebase-memory') return ['http://127.0.0.1:9749/']
+  return []
+}
+
+async function probeDashboard(url: string): Promise<boolean> {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(1000), redirect: 'manual' })
+    await r.body?.cancel()
+    return r.ok
+  } catch { return false }
+}
+
 export interface Command { cmd: string; args: string[] }
 export interface ToolPlan {
   id: ToolId
@@ -224,6 +242,10 @@ export interface ToolDependencies {
   now?: () => number
   headroomInfo: () => Promise<CompressorInfo>
   setupHeadroom: () => Promise<void>
+  /** The configured headroom base URL, for its dashboard link. */
+  headroomUrl?: () => string
+  /** Whether a local dashboard URL answers; kept apart from `request`, which only reaches update sources. */
+  probe?: (url: string) => Promise<boolean>
 }
 
 /** Reads registries only on the six-hour cadence; mutations require an approved plan. */
@@ -367,6 +389,8 @@ export class ToolManager extends EventEmitter {
               : `Install the official ${PLUGINS[key].name} plugin for this client.`
           }
         }
+        const dashboards = await this.liveDashboards(dashboardCandidates(id, this.deps.headroomUrl?.() ?? ''))
+        if (dashboards.length) info.dashboards = dashboards
         info.updateAvailable = info.installed === true && (mcpKey(id) || npxKey(id)
           ? !!info.version && !!info.latest && info.version !== info.latest
           : newerVersion(info.latest, info.version))
@@ -438,6 +462,13 @@ export class ToolManager extends EventEmitter {
     info.foreign = { claude: (entries.claude !== undefined && !ours(entries.claude)) || (entries.claude === undefined && viaPlugin), codex: entries.codex !== undefined && !ours(entries.codex) }
     info.detail = `MCP server run locally by npx from ${pkg}${info.version ? `@${info.version}` : ''}; ${note}. Restart the client after changes.`
     if (viaPlugin) info.detail += ` Claude Code already has it from the ${plugin} plugin.`
+  }
+
+  /** The candidates that answer 2xx within a second; the rest are not running. */
+  private async liveDashboards(urls: string[]): Promise<string[]> {
+    const probe = this.deps.probe ?? probeDashboard
+    const live = await Promise.all(urls.map(async (url) => (await probe(url)) ? url : null))
+    return live.filter((u): u is string => u !== null)
   }
 
   private async chisleStats(): Promise<ToolStats | null> {

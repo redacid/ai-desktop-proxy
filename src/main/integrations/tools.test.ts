@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CompressorInfo } from '@shared/ipc'
-import { approveToolAction, binaryVersion, extractRtk, newerVersion, officialSource, mcpPin, npxPin, parseChisleStats, parsePonytailBand, parsePonytailGain, parseRtkGain, rtkConnected, pluginInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
+import { approveToolAction, binaryVersion, dashboardCandidates, extractRtk, newerVersion, officialSource, mcpPin, npxPin, parseChisleStats, parsePonytailBand, parsePonytailGain, parseRtkGain, rtkConnected, pluginInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
 
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))) })
@@ -28,7 +28,7 @@ async function fixture() {
     rtkVersion: '0.49.0', headroomVersion: '0.40.0', ponyVersion: '5.3.0',
     ponyInstalled: true, codexInstalled: false, marketplace: true, foreignMarketplace: false,
     active: true, managed: 'ours' as CompressorInfo['managed'], local: true,
-    streamCode: 0, failVerification: false, rtkClaude: true, ponyEnabled: true
+    streamCode: 0, failVerification: false, rtkClaude: true, ponyEnabled: true, dashboards: [] as string[]
   }
   const service = vi.fn(async (): Promise<CompressorInfo> => ({
     binary: state.missingHeadroom ? null : '/fake/headroom', uv: '/fake/uv', unit: 'current', active: state.active,
@@ -73,7 +73,8 @@ async function fixture() {
     return new Response(JSON.stringify(payload))
   }) as unknown as ReturnType<typeof vi.fn<typeof fetch>>
   const setup = vi.fn(async () => {})
-  const deps = { root, home: join(root, 'home'), arch: 'x64', runner, stream, find, request, now: () => state.now, headroomInfo: service, setupHeadroom: setup }
+  const deps = { root, home: join(root, 'home'), arch: 'x64', runner, stream, find, request, now: () => state.now, headroomInfo: service, setupHeadroom: setup,
+    headroomUrl: () => 'http://127.0.0.1:6767', probe: async (url: string) => state.dashboards.includes(url) }
   const manager = new ToolManager(deps)
   return { root, state, runner, stream, find, request, setup, manager, deps }
 }
@@ -540,5 +541,18 @@ describe('Context7', () => {
     expect(npxPin({ command: '/usr/bin/npx', args: ['-y', '@upstash/context7-mcp@4.4.4'] }, '@upstash/context7-mcp')).toBe('4.4.4')
     expect(npxPin({ command: 'npx', args: ['-y', '@upstash/context7-mcp@latest'] }, '@upstash/context7-mcp')).toBeNull()
     expect(npxPin({ type: 'http', url: 'https://mcp.context7.com/mcp' }, '@upstash/context7-mcp')).toBeNull()
+  })
+})
+
+describe('dashboards', () => {
+  it('links only the local dashboards that answer', async () => {
+    expect(dashboardCandidates('headroom', 'http://127.0.0.1:6767')).toEqual(['http://127.0.0.1:6767/dashboard'])
+    expect(dashboardCandidates('headroom', 'https://headroom.example.com')).toEqual([])
+    const f = await fixture()
+    f.state.dashboards = ['http://127.0.0.1:6767/dashboard', 'http://127.0.0.1:24283/dashboard/']
+    const tools = await f.manager.refresh(true)
+    expect(tools.find((t) => t.id === 'headroom')!.dashboards).toEqual(['http://127.0.0.1:6767/dashboard'])
+    expect(tools.find((t) => t.id === 'serena')!.dashboards).toEqual(['http://127.0.0.1:24283/dashboard/'])
+    expect(tools.find((t) => t.id === 'codebase-memory')!.dashboards).toBeUndefined()
   })
 })

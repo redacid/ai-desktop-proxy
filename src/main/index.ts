@@ -50,7 +50,8 @@ const headroomService = new HeadroomService(() => store.settings, () => headroom
   userUnitFile(LEGACY_HEADROOM_UNIT))
 const tools = new ToolManager({
   root: app.getPath('userData'), home: homedir(), configHome: process.env.XDG_CONFIG_HOME || undefined, codexHome: process.env.CODEX_HOME || undefined,
-  headroomInfo: () => headroomService.info(), setupHeadroom: () => headroomService.setup()
+  headroomInfo: () => headroomService.info(), setupHeadroom: () => headroomService.setup(),
+  headroomUrl: () => store.settings.headroomUrl
 })
 const proxy = new ProxyManager(() => store.settings, {
   unitFile: defaultUnitFile(),

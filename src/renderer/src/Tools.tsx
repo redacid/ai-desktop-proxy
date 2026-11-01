@@ -219,6 +219,15 @@ export function Tools({ disabled, onBusy, onLogStart, headroom }: {
               <span className={`badge ${tool.updateAvailable ? 'warn' : ''}`}>{version(tool)}</span>
             </div>
             <p className="detail">{tool.detail}</p>
+            {tool.dashboards?.length ? (
+              <p className="dashboards">
+                {tool.dashboards.map((url, i) => (
+                  <a key={url} href={url} target="_blank" rel="noreferrer">
+                    Open dashboard{tool.dashboards!.length > 1 ? ` ${i + 1}` : ''} ↗
+                  </a>
+                ))}
+              </p>
+            ) : null}
             {tool.stats && <Stats stats={tool.stats} />}
             {tool.id === 'headroom' && <>
               <p className={`service ${headroom.status.health}`}><span className={`dot ${headroom.status.health}`} /> {headroom.status.detail}</p>

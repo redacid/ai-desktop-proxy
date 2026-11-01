@@ -129,6 +129,8 @@ export interface ToolInfo {
   enabled?: boolean
   /** MCP servers: a client has a server of that name the app did not add (shown, never changed). */
   foreign?: { claude: boolean; codex: boolean }
+  /** Local web dashboards of the tool that answer right now (Serena runs one per session). */
+  dashboards?: string[]
   /** What the tool reports it achieved; null when it reports nothing readable. */
   stats: ToolStats | null
 }

@@ -154,6 +154,13 @@ appear in the Install log. Missing optional tools do not turn the proxy's health
   never changed. State is read from `~/.claude.json` (`mcpServers`) and `$CODEX_HOME/config.toml`
   (`mcp_servers`). uvx downloads the release on the client's next start.
 
+**Open dashboard ↗** appears on a card while the tool's own web dashboard answers on this machine: headroom at
+`<headroom URL>/dashboard`, Serena at `http://127.0.0.1:24282/dashboard/` (each running Serena takes the next port,
+so there can be several links), and Codebase Memory's CBM Lens at `http://127.0.0.1:9749/` when its daemon runs
+with the UI (`codebase-memory-mcp daemon start --open --port=9749`). The app only checks these addresses with the
+presence check; it never starts a dashboard. RTK's dashboard (`rtk gain --watch`) is terminal-only, and the other
+tools have none.
+
 Hovering a card shows what the tool is for; **↗** next to its name opens the project's official page in the
 browser. The headroom card shows the service state and its lifetime savings with a 14-day chart; the Savings tab
 has the full detail.
