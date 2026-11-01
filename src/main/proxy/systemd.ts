@@ -26,7 +26,7 @@ export interface UnitSpec {
 export function renderUnit(spec: UnitSpec): string {
   const execStart = [spec.exec, ...spec.args].map(quoteArg).join(' ')
   const env = Object.entries(spec.env ?? {}).map(([k, v]) => `\nEnvironment=${quoteArg(`${k}=${v}`)}`).join('')
-  return `# Managed by Claude Desktop Proxy; edits are overwritten.
+  return `# Managed by AI Desktop Proxy; edits are overwritten.
 [Unit]
 Description=${spec.description}
 After=network-online.target

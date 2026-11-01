@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { exists } from './fsutil'
 
-const FILE = 'claude-desktop-proxy.desktop'
+const FILE = 'ai-desktop-proxy.desktop'
 
 export function autostartFile(): string {
   const base = process.env.XDG_CONFIG_HOME || join(homedir(), '.config')
@@ -19,10 +19,10 @@ export function desktopArg(arg: string): string {
 export function desktopEntry(command: string[]): string {
   return `[Desktop Entry]
 Type=Application
-Name=Claude Desktop Proxy
+Name=AI Desktop Proxy
 Comment=Routes AI coding clients through a local compression proxy
 Exec=${command.map(desktopArg).join(' ')}
-Icon=claude-desktop-proxy
+Icon=ai-desktop-proxy
 Terminal=false
 X-GNOME-Autostart-enabled=true
 `
@@ -34,6 +34,14 @@ export class Autostart {
     private readonly command: () => string[],
     private readonly file = autostartFile()
   ) {}
+
+  /** Replaces an entry written under an older file name (e.g. before the app was renamed). */
+  async migrateFrom(oldName: string): Promise<void> {
+    const old = join(dirname(this.file), oldName)
+    if (!(await exists(old))) return
+    await this.set(true)
+    await fs.rm(old, { force: true })
+  }
 
   isEnabled(): Promise<boolean> {
     return exists(this.file)

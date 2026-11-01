@@ -273,7 +273,7 @@ export class ToolManager extends EventEmitter {
   }
 
   private async response(url: string, maxBytes = 1024 * 1024): Promise<Buffer> {
-    const response = await this.request(url, { signal: AbortSignal.timeout(maxBytes > 8 * 1024 * 1024 ? 60_000 : 15_000), headers: { 'User-Agent': 'claude-desktop-proxy' } })
+    const response = await this.request(url, { signal: AbortSignal.timeout(maxBytes > 8 * 1024 * 1024 ? 60_000 : 15_000), headers: { 'User-Agent': 'ai-desktop-proxy' } })
     if (!response.ok) throw new Error(`Update source returned HTTP ${response.status}`)
     const chunks: Uint8Array[] = []
     let length = 0

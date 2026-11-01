@@ -37,7 +37,7 @@ describe('ProxyManager', () => {
   let ssOutput: string
   let mainPid: number
 
-  function manager(): ProxyManager {
+  function manager(legacyUnitFile?: string): ProxyManager {
     const runner = async (cmd: string, args: string[]): Promise<RunResult> => {
       calls.push([cmd, ...args])
       if (args.includes('is-active')) return { code: active ? 0 : 3, stdout: '', stderr: '' }
@@ -52,7 +52,7 @@ describe('ProxyManager', () => {
     }
     return new ProxyManager(
       () => settings,
-      { unitFile: join(dir, 'unit', 'x.service'), addonSource: join(dir, 'addon.py'), addonTarget: join(dir, 'cfg', 'addon.py') },
+      { unitFile: join(dir, 'unit', 'x.service'), addonSource: join(dir, 'addon.py'), addonTarget: join(dir, 'cfg', 'addon.py'), legacyUnitFile },
       runner,
       async () => listening
     )
@@ -107,6 +107,18 @@ describe('ProxyManager', () => {
     await fs.mkdir(join(dir, 'unit'))
     await fs.writeFile(join(dir, 'unit', 'x.service'), 'ExecStart=/x/mitmdump --map-remote |a|b\n')
     expect((await manager().info()).unit).toBe('legacy')
+  })
+
+  it('treats the unit from before the rename as ours and replaces it on setup', async () => {
+    const old = join(dir, 'unit', 'claude-desktop-proxy.service')
+    await fs.mkdir(join(dir, 'unit'))
+    await fs.writeFile(old, 'ExecStart=/x/mitmdump\n')
+    const m = manager(old)
+    expect((await m.info()).unit).toBe('legacy')
+    await m.setup()
+    await expect(fs.access(old)).rejects.toThrow()
+    expect(calls).toContainEqual(['systemctl', '--user', 'disable', '--now', 'claude-desktop-proxy.service'])
+    expect((await m.info()).unit).toBe('current')
   })
 
   it('refuses to start while another process holds the port', async () => {

@@ -1,4 +1,4 @@
-"""mitmproxy addon for claude-desktop-proxy.
+"""mitmproxy addon for ai-desktop-proxy.
 
 Sends decrypted api.anthropic.com requests to the compressor (headroom) while it
 is healthy, and lets them go straight to the API when it is not, so Claude keeps

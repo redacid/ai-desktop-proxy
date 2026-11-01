@@ -46,7 +46,7 @@ check.
 | Buttons you see | When | What they do |
 |---|---|---|
 | Install mitmproxy | mitmproxy is not installed | Asks, runs `uv tool install mitmproxy`, then sets up and starts the service |
-| Set up & start | installed, no service | Writes `claude-desktop-proxy.service` and starts it |
+| Set up & start | installed, no service | Writes `ai-desktop-proxy.service` and starts it |
 | Apply | the service was written by `cdp.sh` or by an older app version, or settings changed | Rewrites and restarts the service |
 | Restart / Stop / Start | service exists | systemd actions. Stop first removes proxy settings from routed clients |
 | Remove | service exists | Removes client settings, then stops and deletes the service. mitmproxy stays installed |
@@ -63,7 +63,7 @@ Desktop), the card shows "run outside this app" and offers no buttons: the app n
 
 Otherwise the card offers **Install headroom** (`uv tool install --python 3.13 "headroom-ai[all]"`, a few hundred
 MB), **Set up & start**, and the same Restart / Stop / Start / Remove / Logs as the proxy, for
-`claude-desktop-proxy-headroom.service`. The first start can take up to a minute.
+`ai-desktop-proxy-headroom.service`. The first start can take up to a minute.
 
 ### Clients
 
@@ -241,7 +241,7 @@ requests in memory, so an older row may say it is no longer available.
 | headroom URL | `http://127.0.0.1:6767` | Base URL without a path. Only a local `http://127.0.0.1`/`localhost` URL can be run by the app |
 | Check interval | 60 s | 10–3600 s |
 | Restore proxy settings | on | Auto-restore described above |
-| Start at login | off | Writes `~/.config/autostart/claude-desktop-proxy.desktop`, which starts the app hidden |
+| Start at login | off | Writes `~/.config/autostart/ai-desktop-proxy.desktop`, which starts the app hidden |
 
 ### headroom options
 
@@ -274,17 +274,17 @@ options do not reach that headroom.
 | Path | What |
 |---|---|
 | `~/.claude/settings.json` | `env.HTTPS_PROXY`, `env.NODE_EXTRA_CA_CERTS`, `env.NO_PROXY` (merged) |
-| `~/.claude/settings.json.bak-claude-desktop-proxy` | One-time backup made before the first change |
+| `~/.claude/settings.json.bak-ai-desktop-proxy` | One-time backup made before the first change |
 | `~/.codex/config.toml` | `openai_base_url` and the comment line above it |
-| `~/.codex/config.toml.bak-claude-desktop-proxy` | One-time backup made before the first change |
-| `~/.config/claude-desktop-proxy/state.json` | App settings and what was written into each client |
-| `~/.config/claude-desktop-proxy/tool-updates.json` | Latest known tool versions and update-check attempt times |
-| `~/.config/claude-desktop-proxy/tools/rtk` | App-managed RTK binary; a temporary `rtk.staging` file is used for verification |
+| `~/.codex/config.toml.bak-ai-desktop-proxy` | One-time backup made before the first change |
+| `~/.config/ai-desktop-proxy/state.json` | App settings and what was written into each client |
+| `~/.config/ai-desktop-proxy/tool-updates.json` | Latest known tool versions and update-check attempt times |
+| `~/.config/ai-desktop-proxy/tools/rtk` | App-managed RTK binary; a temporary `rtk.staging` file is used for verification |
 | `~/.local/bin/rtk` | Symlink to the app-managed RTK, created only when absent |
-| `~/.config/claude-desktop-proxy/cdp_addon.py` | The mitmproxy addon the service loads |
-| `~/.config/systemd/user/claude-desktop-proxy.service` | Proxy service |
-| `~/.config/systemd/user/claude-desktop-proxy-headroom.service` | headroom service (only if the app runs headroom) |
-| `~/.config/autostart/claude-desktop-proxy.desktop` | Start at login (only if enabled) |
+| `~/.config/ai-desktop-proxy/cdp_addon.py` | The mitmproxy addon the service loads |
+| `~/.config/systemd/user/ai-desktop-proxy.service` | Proxy service |
+| `~/.config/systemd/user/ai-desktop-proxy-headroom.service` | headroom service (only if the app runs headroom) |
+| `~/.config/autostart/ai-desktop-proxy.desktop` | Start at login (only if enabled) |
 | `~/.mitmproxy/` | mitmproxy's CA; trusted only by clients the app routes, never by the system |
 
 Approved RTK connection commands additionally manage the client's global hooks and instruction files
@@ -294,6 +294,11 @@ commands manage the client's marketplace registry, plugin cache and enablement t
 These client-managed artifacts are not removed by **Remove** on either proxy service card.
 
 ## Troubleshooting
+
+**After the rename from Claude Desktop Proxy.** Quit the old copy from its tray first: the new name has its own
+single-instance lock, so both would otherwise run. The first start copies the old settings and the RTK binary over;
+the Proxy and Compressor cards then show **Apply**, which replaces the old `claude-desktop-proxy*.service` units
+with `ai-desktop-proxy*.service`. The old `~/.config/claude-desktop-proxy` directory can be deleted after that.
 
 **The proxy card flips between Ok and Degraded, logs say "address already in use".** Another process holds the
 port, typically a `mitmdump` started by hand. The card names it ("held by mitmdump (pid …)"); **Restart** or

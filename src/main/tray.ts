@@ -52,7 +52,7 @@ export class AppTray {
 
     this.health = health
     if (!this.busyTimer) this.tray.setImage(icon(health))
-    this.tray.setToolTip(`Claude Desktop Proxy: ${labels[health]}`)
+    this.tray.setToolTip(`AI Desktop Proxy: ${labels[health]}`)
     this.tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: 'Show', click: () => this.actions.show() },

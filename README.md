@@ -1,4 +1,4 @@
-# claude-desktop-proxy
+# AI Desktop Proxy
 
 A Linux tray app (Electron) that routes AI coding clients through a local token-compression proxy.
 

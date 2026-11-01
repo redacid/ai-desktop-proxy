@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
@@ -16,14 +17,15 @@ import { ClaudeCodeAdapter } from './clients/claude-code'
 import { CodexAdapter } from './clients/codex'
 import { ClientManager } from './clients/manager'
 import { HeadroomBackend } from './compressors/headroom'
-import { HEADROOM_PACKAGE, HEADROOM_PYTHON, HeadroomService, localEndpoint } from './compressors/headroom-service'
+import { HEADROOM_PACKAGE, HEADROOM_PYTHON, HEADROOM_UNIT, HeadroomService, localEndpoint } from './compressors/headroom-service'
 import { headroomArgs, headroomEnv, normalizeHeadroomOptions, validateHeadroomOptions } from './compressors/headroom-options'
 import { resourcePath } from './paths'
 import { defaultUnitFile, ProxyManager } from './proxy/manager'
-import { findUv, PortTakenError } from './proxy/tools'
+import { findUv, PortTakenError, userUnitFile } from './proxy/tools'
 import { isPortListening } from './proxy-env'
 import { normalizeUrl, validateSettings } from './settings'
 import { compressorStatus, proxyStatus, StatusMonitor } from './status'
+import { LEGACY_AUTOSTART, LEGACY_HEADROOM_UNIT, LEGACY_PROXY_UNIT, LEGACY_SLUG, migrateUserData } from './rename'
 import { AppStore } from './store'
 import { AppTray } from './tray'
 import { createMainWindow } from './window'
@@ -40,9 +42,12 @@ let busy = false // one service action at a time
 let wasListening: boolean | null = null
 let portsSeen: string | null = null
 
+// One userData dir for dev and packaged builds (Electron would derive it from productName there).
+app.setPath('userData', join(app.getPath('appData'), 'ai-desktop-proxy'))
 const store = new AppStore(join(app.getPath('userData'), 'state.json'))
 const headroom = (): HeadroomBackend => new HeadroomBackend(store.settings.headroomUrl)
-const headroomService = new HeadroomService(() => store.settings, () => headroom().answering())
+const headroomService = new HeadroomService(() => store.settings, () => headroom().answering(), userUnitFile(HEADROOM_UNIT), undefined,
+  userUnitFile(LEGACY_HEADROOM_UNIT))
 const tools = new ToolManager({
   root: app.getPath('userData'), home: homedir(), configHome: process.env.XDG_CONFIG_HOME || undefined, codexHome: process.env.CODEX_HOME || undefined,
   headroomInfo: () => headroomService.info(), setupHeadroom: () => headroomService.setup()
@@ -50,7 +55,8 @@ const tools = new ToolManager({
 const proxy = new ProxyManager(() => store.settings, {
   unitFile: defaultUnitFile(),
   addonSource: resourcePath('mitmproxy', 'cdp_addon.py'),
-  addonTarget: join(app.getPath('userData'), 'cdp_addon.py')
+  addonTarget: join(app.getPath('userData'), 'cdp_addon.py'),
+  legacyUnitFile: userUnitFile(LEGACY_PROXY_UNIT)
 })
 const clients = new ClientManager([new ClaudeCodeAdapter(), new CodexAdapter()], store, undefined, undefined, undefined, (port) =>
   proxy.ownsPort(port)
@@ -180,7 +186,7 @@ async function runProxyAction(action: ProxyAction): Promise<string | null> {
       const ok = await confirm(
         'Install mitmproxy and start the proxy?',
         'Runs "uv tool install mitmproxy", then creates and starts the systemd user service ' +
-          `claude-desktop-proxy.service on 127.0.0.1:${store.settings.proxyPort} (and :${store.settings.codexPort} for Codex). ` +
+          `ai-desktop-proxy.service on 127.0.0.1:${store.settings.proxyPort} (and :${store.settings.codexPort} for Codex). ` +
           'Only api.anthropic.com and api.openai.com are decrypted; the mitmproxy CA is trusted only by clients you turn on here.',
         'Install'
       )
@@ -204,7 +210,7 @@ async function runProxyAction(action: ProxyAction): Promise<string | null> {
       if (action === 'remove') {
         const ok = await confirm(
           'Remove the proxy service?',
-          'Stops and deletes claude-desktop-proxy.service. mitmproxy itself stays installed.' +
+          'Stops and deletes ai-desktop-proxy.service. mitmproxy itself stays installed.' +
             (enabled.length ? ` Proxy settings are removed from ${enabled.join(', ')} first.` : ''),
           'Remove'
         )
@@ -243,7 +249,7 @@ async function runCompressorAction(action: CompressorAction): Promise<string | n
       const ok = await confirm(
         'Install headroom and start it?',
         `Runs "uv tool install --python ${HEADROOM_PYTHON} ${HEADROOM_PACKAGE}" (a few hundred MB), then creates ` +
-          `and starts the systemd user service claude-desktop-proxy-headroom.service on ${ep.host}:${ep.port}.`,
+          `and starts the systemd user service ai-desktop-proxy-headroom.service on ${ep.host}:${ep.port}.`,
         'Install'
       )
       if (!ok) return ''
@@ -266,7 +272,7 @@ async function runCompressorAction(action: CompressorAction): Promise<string | n
     case 'remove': {
       const ok = await confirm(
         'Remove the headroom service?',
-        'Stops and deletes claude-desktop-proxy-headroom.service. headroom itself stays installed ' +
+        'Stops and deletes ai-desktop-proxy-headroom.service. headroom itself stays installed ' +
           '(uv tool uninstall headroom-ai removes it). The proxy sends requests straight to the API meanwhile.',
         'Remove'
       )
@@ -359,6 +365,12 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', showWindow)
 
   app.whenReady().then(async () => {
+    // First start after the rename from claude-desktop-proxy: bring settings, RTK and autostart along.
+    const legacyDir = [LEGACY_SLUG, 'Claude Desktop Proxy'].map((d) => join(app.getPath('appData'), d)).find((d) => existsSync(d))
+    const moved = await (legacyDir ? migrateUserData(legacyDir, app.getPath('userData'), homedir()) : Promise.resolve([]))
+      .catch((err) => { console.error('Migrating the old settings failed:', err); return [] })
+    if (moved.length) console.log(`Carried over from ${LEGACY_SLUG}: ${moved.join(', ')}`)
+    await autostart.migrateFrom(LEGACY_AUTOSTART).catch((err) => console.error('Migrating autostart failed:', err))
     await store.load()
 
     ipcMain.handle(IPC.getStatus, () => monitor.current)
@@ -386,7 +398,7 @@ if (!app.requestSingleInstanceLock()) {
       setClientEnabled: (id, enabled) => void setClientEnabled(id, enabled),
       proxyAction: (action) =>
         void proxyAction(action).then((r) => {
-          if (r.error) dialog.showErrorBox('Claude Desktop Proxy', r.error)
+          if (r.error) dialog.showErrorBox('AI Desktop Proxy', r.error)
         }),
       quit: () => {
         quitting = true

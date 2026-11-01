@@ -24,7 +24,7 @@ export function clientsStatus(list: ClientInfo[]): ComponentStatus {
 export function proxyStatus(info: ProxyInfo): ComponentStatus {
   const where = `127.0.0.1:${info.port}`
   if (info.listening) {
-    if (info.unit === 'legacy') return { health: 'degraded', detail: `running from the cdp.sh unit; set it up here to switch` }
+    if (info.unit === 'legacy') return { health: 'degraded', detail: `running from an older unit (claude-desktop-proxy or cdp.sh); apply to switch to ai-desktop-proxy` }
     if (info.unit === 'outdated') return { health: 'degraded', detail: `settings or app changed; apply to update the service` }
     if (!info.ours) {
       const who = info.owner ? `${info.owner.name} (pid ${info.owner.pid})` : 'another process'

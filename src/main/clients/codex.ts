@@ -4,11 +4,14 @@ import { dirname, join } from 'node:path'
 import { parse } from 'smol-toml'
 import { backupOnce, exists, writeTextAtomic } from '../fsutil'
 import type { ProxyEnv } from '../proxy-env'
+import { LEGACY_BACKUP_SUFFIX } from '../rename'
 import { ClientConflictError, type AppliedRecord, type ClientAdapter, type Inspection } from './types'
 
 const KEY = 'openai_base_url'
-const MARKER = '# Added by Claude Desktop Proxy; turn Codex off in the app to remove it.'
-export const BACKUP_SUFFIX = '.bak-claude-desktop-proxy'
+const MARKER = '# Added by AI Desktop Proxy; turn Codex off in the app to remove it.'
+// The same line from before the rename, so an existing entry still comes out cleanly.
+const LEGACY_MARKER = '# Added by Claude Desktop Proxy; turn Codex off in the app to remove it.'
+export const BACKUP_SUFFIX = '.bak-ai-desktop-proxy'
 
 type Config = Record<string, unknown>
 
@@ -78,7 +81,7 @@ export class CodexAdapter implements ClientAdapter {
   }
 
   private async write(text: string): Promise<void> {
-    await backupOnce(this.configPath, this.configPath + BACKUP_SUFFIX)
+    await backupOnce(this.configPath, this.configPath + BACKUP_SUFFIX, this.configPath + LEGACY_BACKUP_SUFFIX)
     await writeTextAtomic(this.configPath, text)
   }
 
@@ -154,7 +157,7 @@ export function stripOurs(text: string, url: string): string {
   const lines = text.split('\n')
   const at = lines.findIndex((l) => l.trimEnd() === keyLine(url))
   if (at < 0) return text
-  const from = at > 0 && lines[at - 1].trimEnd() === MARKER ? at - 1 : at
+  const from = at > 0 && [MARKER, LEGACY_MARKER].includes(lines[at - 1].trimEnd()) ? at - 1 : at
   lines.splice(from, at - from + 1)
   return lines.join('\n')
 }

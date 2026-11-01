@@ -10,7 +10,7 @@ export function createMainWindow(isQuitting: () => boolean): BrowserWindow {
     minHeight: 480,
     show: false,
     autoHideMenuBar: true,
-    title: 'Claude Desktop Proxy',
+    title: 'AI Desktop Proxy',
     icon: resourcePath('icon.png'), // taskbar/alt-tab; packaged builds also get it from the .desktop entry
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

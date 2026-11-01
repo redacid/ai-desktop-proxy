@@ -1,5 +1,5 @@
-appId: ua.redacid.claude-desktop-proxy
-productName: Claude Desktop Proxy
+appId: ua.redacid.ai-desktop-proxy
+productName: AI Desktop Proxy
 directories:
   output: dist
 files:

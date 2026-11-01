@@ -6,8 +6,10 @@ import { renderUnit, SystemdUser } from '../proxy/systemd'
 import { findUv, findUvTool, portOwner, PortTakenError, userUnitFile } from '../proxy/tools'
 import type { Settings } from '../store'
 import { headroomArgs, headroomEnv } from './headroom-options'
+import { LEGACY_HEADROOM_UNIT } from '../rename'
+import { exists } from '../fsutil'
 
-export const HEADROOM_UNIT = 'claude-desktop-proxy-headroom.service'
+export const HEADROOM_UNIT = 'ai-desktop-proxy-headroom.service'
 export const HEADROOM_PACKAGE = 'headroom-ai[all]'
 // headroom needs Python 3.10+; uv fetches this one if the system has none.
 export const HEADROOM_PYTHON = '3.13'
@@ -37,9 +39,26 @@ export class HeadroomService {
     private readonly settings: () => Settings,
     private readonly answering: () => Promise<boolean>,
     private readonly unitFile = userUnitFile(HEADROOM_UNIT),
-    private readonly runner: Runner = defaultRun
+    private readonly runner: Runner = defaultRun,
+    /** The unit from before the rename, replaced on setup. Unset in tests. */
+    private readonly legacyUnitFile: string | null = null
   ) {
     this.systemd = new SystemdUser(HEADROOM_UNIT, runner)
+    this.legacy = new SystemdUser(LEGACY_HEADROOM_UNIT, runner)
+  }
+
+  private readonly legacy: SystemdUser
+
+  private async legacyExists(): Promise<boolean> {
+    return !!this.legacyUnitFile && (await exists(this.legacyUnitFile))
+  }
+
+  /** Stops and deletes the old unit so ours can take its port. */
+  private async retireLegacy(): Promise<void> {
+    if (!(await this.legacyExists())) return
+    await this.legacy.disableNow()
+    await fs.rm(this.legacyUnitFile!, { force: true })
+    await this.systemd.daemonReload()
   }
 
   findBinary(): Promise<string | null> {
@@ -48,7 +67,7 @@ export class HeadroomService {
 
   private unit(binary: string, ep: { host: string; port: number }): string {
     return renderUnit({
-      description: 'headroom proxy (Claude Desktop Proxy)',
+      description: 'headroom proxy (AI Desktop Proxy)',
       exec: binary,
       args: [
         'proxy', '--host', ep.host, '--port', String(ep.port),
@@ -61,18 +80,21 @@ export class HeadroomService {
 
   async info(): Promise<CompressorInfo> {
     const ep = localEndpoint(this.settings().headroomUrl)
-    const [binary, uv, answering, active] = await Promise.all([
+    const [binary, uv, answering, ownActive, legacy] = await Promise.all([
       this.findBinary(),
       findUv(),
       this.answering(),
-      this.systemd.isActive()
+      this.systemd.isActive(),
+      this.legacyExists()
     ])
+    // A headroom started by our unit from before the rename is still ours, not external.
+    const active = ownActive || (legacy && (await this.legacy.isActive()))
     let unit: CompressorInfo['unit'] = 'missing'
     try {
       const text = await fs.readFile(this.unitFile, 'utf8')
       unit = binary && ep && text === this.unit(binary, ep) ? 'current' : 'outdated'
     } catch {
-      // no unit
+      if (legacy) unit = 'outdated' // replaced on the next setup
     }
     const managed: CompressorInfo['managed'] = active ? 'ours' : answering ? 'external' : 'none'
     return { binary, uv, unit, active, answering, managed, local: ep !== null }
@@ -93,6 +115,7 @@ export class HeadroomService {
     if (!binary) throw new Error('headroom is not installed')
     const ep = localEndpoint(this.settings().headroomUrl)
     if (!ep) throw new Error(`${this.settings().headroomUrl} is not a local http URL; headroom can only be run here on 127.0.0.1`)
+    await this.retireLegacy()
     const owner = await portOwner(ep.port, this.runner)
     if (owner && owner.pid !== (await this.systemd.mainPid())) throw new PortTakenError(ep.port, owner, 'headroom')
     await fs.mkdir(dirname(this.unitFile), { recursive: true })
@@ -108,11 +131,13 @@ export class HeadroomService {
     await this.waitUntilAnswering()
   }
 
-  stop(): Promise<void> {
-    return this.systemd.stop()
+  async stop(): Promise<void> {
+    if (await this.legacyExists()) await this.legacy.stop()
+    await this.systemd.stop()
   }
 
   async remove(): Promise<void> {
+    await this.retireLegacy()
     await this.systemd.disableNow()
     await fs.rm(this.unitFile, { force: true })
     await this.systemd.daemonReload()

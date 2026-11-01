@@ -9,8 +9,8 @@
 │ Main process (src/main)                             ▼   │
 │   ClientManager ── ClaudeCodeAdapter ── ~/.claude/settings.json
 │                 └─ CodexAdapter ────── ~/.codex/config.toml
-│   ProxyManager ─── systemctl --user ── claude-desktop-proxy.service ── mitmdump + cdp_addon.py
-│   HeadroomService ─ systemctl --user ── claude-desktop-proxy-headroom.service ── headroom proxy
+│   ProxyManager ─── systemctl --user ── ai-desktop-proxy.service ── mitmdump + cdp_addon.py
+│   HeadroomService ─ systemctl --user ── ai-desktop-proxy-headroom.service ── headroom proxy
 │   HeadroomBackend ─ HTTP /health, /stats-history, /transformations/feed
 │   StatusMonitor, AppTray, AppStore, Autostart           │
 └─────────────────────────────────────────────────────────┘
@@ -170,9 +170,24 @@ These protect the user's configs and running sessions; keep them when changing c
 - Never touch a headroom the app did not start.
 - Install anything only after the user confirms a dialog that names the command.
 
+## Rename from claude-desktop-proxy
+
+The app was called Claude Desktop Proxy (`claude-desktop-proxy`) until it routed more than Claude. Old names are
+only read, in `rename.ts`, to carry an installation over:
+
+- On the first start without `~/.config/ai-desktop-proxy/state.json`, `state.json` and `tool-updates.json` are
+  copied from `~/.config/claude-desktop-proxy` (dev builds) or `~/.config/Claude Desktop Proxy` (packaged), the
+  app-managed RTK moves along, and `~/.local/bin/rtk` is re-pointed if it was our symlink. The old directory stays,
+  because an old proxy unit still loads its addon from there until it is replaced.
+- `claude-desktop-proxy.service` and `claude-desktop-proxy-headroom.service` count as ours (their main PIDs own
+  the ports); the proxy card shows **Apply** (`unit: legacy`), and setup or remove disables and deletes them.
+- A backup with the old `.bak-claude-desktop-proxy` suffix counts as the pre-app copy, so no post-app backup is made
+  under the new name; the Codex marker line written under the old name is still recognised and removed.
+- An old autostart entry is rewritten as `ai-desktop-proxy.desktop` and deleted.
+
 ## State
 
-`~/.config/claude-desktop-proxy/state.json` (Electron `userData`):
+`~/.config/ai-desktop-proxy/state.json` (Electron `userData`):
 
 ```json
 {

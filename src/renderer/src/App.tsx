@@ -333,7 +333,7 @@ export function App(): React.JSX.Element {
       <header className="top">
         <div>
           <h1>
-            <span className={`dot ${status.overall}`} /> Claude Desktop Proxy
+            <span className={`dot ${status.overall}`} /> AI Desktop Proxy
           </h1>
           <p className="subtitle">{SUMMARY[status.overall]}</p>
         </div>

@@ -82,7 +82,7 @@ export interface ProxyInfo {
   codexPort: number
   mitmdump: string | null // path, or null when mitmproxy is not installed
   uv: string | null
-  /** current = written by this app version; legacy = written by cdp.sh; outdated = settings or app changed */
+  /** current = written by this app version; legacy = an older unit (claude-desktop-proxy.service, from before the rename or cdp.sh); outdated = settings or app changed */
   unit: 'missing' | 'legacy' | 'outdated' | 'current'
   active: boolean
   listening: boolean

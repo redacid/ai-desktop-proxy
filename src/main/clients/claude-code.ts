@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { backupOnce, exists, writeJsonAtomic } from '../fsutil'
 import { LOCAL_HOSTS, type ProxyEnv } from '../proxy-env'
+import { LEGACY_BACKUP_SUFFIX } from '../rename'
 import { ClientConflictError, type AppliedRecord, type ClientAdapter, type Inspection } from './types'
 
 type Env = Record<string, unknown>
@@ -14,7 +15,7 @@ const NO_PROXY = 'NO_PROXY'
 // What the shell version (legacy/cdp.sh) wrote; removed when there is no record.
 const LEGACY_NO_PROXY = LOCAL_HOSTS.join(',')
 
-export const BACKUP_SUFFIX = '.bak-claude-desktop-proxy'
+export const BACKUP_SUFFIX = '.bak-ai-desktop-proxy'
 
 function splitHosts(value: unknown): string[] {
   return typeof value === 'string'
@@ -62,7 +63,7 @@ export class ClaudeCodeAdapter implements ClientAdapter {
   }
 
   private async write(settings: Settings): Promise<void> {
-    await backupOnce(this.configPath, this.configPath + BACKUP_SUFFIX)
+    await backupOnce(this.configPath, this.configPath + BACKUP_SUFFIX, this.configPath + LEGACY_BACKUP_SUFFIX)
     await writeJsonAtomic(this.configPath, settings)
   }
 

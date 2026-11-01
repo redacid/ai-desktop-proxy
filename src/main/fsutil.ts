@@ -51,9 +51,10 @@ export async function writeTextAtomic(path: string, text: string, fallbackMode =
   }
 }
 
-/** Copies `path` to `backup` once; later calls keep the first (pre-app) copy. */
-export async function backupOnce(path: string, backup: string): Promise<void> {
+/** Copies `path` to `backup` once; later calls keep the first (pre-app) copy, also under an older name. */
+export async function backupOnce(path: string, backup: string, ...older: string[]): Promise<void> {
   if (!(await exists(path)) || (await exists(backup))) return
+  for (const b of older) if (await exists(b)) return
   await fs.copyFile(await resolveTarget(path), backup)
   await fs.chmod(backup, (await fs.stat(await resolveTarget(path))).mode & 0o7777)
 }

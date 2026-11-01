@@ -6,11 +6,12 @@ import { isPortListening } from '../proxy-env'
 import type { Settings } from '../store'
 import { run as defaultRun, runStreaming, type Runner } from './exec'
 import { renderUnit, SystemdUser } from './systemd'
+import { LEGACY_PROXY_UNIT } from '../rename'
 import { findUv, findUvTool, portOwner, PortTakenError, userUnitFile, type PortOwner } from './tools'
 
 export { parseSsOwner, PortTakenError } from './tools'
 
-export const UNIT = 'claude-desktop-proxy.service' // same name as legacy/cdp.sh, so setup migrates it
+export const UNIT = 'ai-desktop-proxy.service'
 export const API_HOSTS_REGEX = '^api[.]anthropic[.]com:443$'
 export const OPENAI_HOSTS_REGEX = '^api[.]openai[.]com:443$'
 export const OPENAI_UPSTREAM = 'https://api.openai.com'
@@ -19,6 +20,8 @@ export interface ProxyPaths {
   unitFile: string
   addonSource: string // shipped with the app
   addonTarget: string // stable copy the unit points at (AppImage paths change every run)
+  /** The unit from before the rename (or legacy/cdp.sh), replaced on setup. Unset in tests. */
+  legacyUnitFile?: string
 }
 
 export function defaultUnitFile(): string {
@@ -57,6 +60,27 @@ export class ProxyManager {
     private readonly listening: (port: number) => Promise<boolean> = isPortListening
   ) {
     this.systemd = new SystemdUser(UNIT, runner)
+    this.legacy = new SystemdUser(LEGACY_PROXY_UNIT, runner)
+  }
+
+  private readonly legacy: SystemdUser
+
+  /** Main PIDs of our unit and of a not yet replaced old one (0 = not running). */
+  private async mainPids(): Promise<number[]> {
+    const pids = [await this.systemd.mainPid(), this.paths.legacyUnitFile ? await this.legacy.mainPid() : 0]
+    return pids.filter(Boolean)
+  }
+
+  private async legacyExists(): Promise<boolean> {
+    return !!this.paths.legacyUnitFile && (await exists(this.paths.legacyUnitFile))
+  }
+
+  /** Stops and deletes the old unit so ours can take the ports. */
+  private async retireLegacy(): Promise<void> {
+    if (!(await this.legacyExists())) return
+    await this.legacy.disableNow()
+    await fs.rm(this.paths.legacyUnitFile!, { force: true })
+    await this.systemd.daemonReload()
   }
 
   findUv(): Promise<string | null> {
@@ -74,24 +98,24 @@ export class ProxyManager {
 
   /** True only when our service's main process is seen listening on `port`; unknown counts as no. */
   async ownsPort(port: number): Promise<boolean> {
-    const [owner, mainPid] = await Promise.all([this.portOwner(port), this.systemd.mainPid()])
-    return !!owner && !!mainPid && owner.pid === mainPid
+    const [owner, pids] = await Promise.all([this.portOwner(port), this.mainPids()])
+    return !!owner && pids.includes(owner.pid)
   }
 
   /** The first of our ports held by something other than our service, or null. */
   async foreignOwner(): Promise<{ port: number; owner: PortOwner } | null> {
     const { proxyPort, codexPort } = this.settings()
-    const mainPid = await this.systemd.mainPid()
+    const pids = await this.mainPids()
     for (const port of [proxyPort, codexPort]) {
       const owner = await this.portOwner(port)
-      if (owner && owner.pid !== mainPid) return { port, owner }
+      if (owner && !pids.includes(owner.pid)) return { port, owner }
     }
     return null
   }
 
   private async expectedUnit(mitmdump: string): Promise<string> {
     return renderUnit({
-      description: 'Claude Desktop Proxy (mitmdump)',
+      description: 'AI Desktop Proxy (mitmdump)',
       exec: mitmdump,
       args: mitmdumpArgs(this.settings(), this.paths.addonTarget)
     })
@@ -99,7 +123,7 @@ export class ProxyManager {
 
   async info(): Promise<ProxyInfo> {
     const s = this.settings()
-    const [mitmdump, uv, listening, codexListening, caExists, active, owner, mainPid] = await Promise.all([
+    const [mitmdump, uv, listening, codexListening, caExists, ownActive, owner, pids] = await Promise.all([
       this.findMitmdump(),
       this.findUv(),
       this.listening(s.proxyPort),
@@ -107,7 +131,7 @@ export class ProxyManager {
       exists(s.caFile),
       this.systemd.isActive(),
       this.portOwner(),
-      this.systemd.mainPid()
+      this.mainPids()
     ])
     let unit: ProxyInfo['unit'] = 'missing'
     try {
@@ -117,10 +141,12 @@ export class ProxyManager {
       else if (mitmdump && current === (await this.expectedUnit(mitmdump)) && addonCurrent) unit = 'current'
       else unit = 'outdated'
     } catch {
-      // no unit file
+      // no unit file; an old unit from before the rename still counts as ours, to be replaced
+      if (await this.legacyExists()) unit = 'legacy'
     }
+    const active = ownActive || (unit === 'legacy' && (await this.legacy.isActive()))
     // Without ss output, trust systemd: an active service is assumed to own the port.
-    const ours = owner ? owner.pid === mainPid : active
+    const ours = owner ? pids.includes(owner.pid) : active
     return { port: s.proxyPort, codexPort: s.codexPort, mitmdump, uv, unit, active, listening, codexListening, caExists, owner, ours }
   }
 
@@ -154,6 +180,7 @@ export class ProxyManager {
     await fs.copyFile(this.paths.addonSource, this.paths.addonTarget)
     await fs.mkdir(dirname(this.paths.unitFile), { recursive: true })
     await fs.writeFile(this.paths.unitFile, await this.expectedUnit(mitmdump))
+    await this.retireLegacy()
     await this.ensurePortFree()
     await this.systemd.daemonReload()
     await this.systemd.enable()
@@ -167,11 +194,13 @@ export class ProxyManager {
     await this.waitUntilServing()
   }
 
-  stop(): Promise<void> {
-    return this.systemd.stop()
+  async stop(): Promise<void> {
+    if (await this.legacyExists()) await this.legacy.stop()
+    await this.systemd.stop()
   }
 
   async remove(): Promise<void> {
+    await this.retireLegacy()
     await this.systemd.disableNow()
     await fs.rm(this.paths.unitFile, { force: true })
     await this.systemd.daemonReload()
