@@ -1,0 +1,26 @@
+site_name: AI Desktop Proxy
+site_description: Install, configure and understand the AI Desktop Proxy Linux app.
+site_url: https://redacid.github.io/ai-desktop-proxy/
+repo_url: https://github.com/redacid/ai-desktop-proxy
+repo_name: redacid/ai-desktop-proxy
+edit_uri: edit/main/docs/
+strict: true
+validation:
+  links:
+    anchors: warn
+nav:
+  - Home: index.md
+  - Interface tour: interface.md
+  - User guide: user-guide.md
+  - Architecture: architecture.md
+  - Development: development.md
+  - Roadmap: plan.md
+theme:
+  name: mkdocs
+  color_mode: auto
+  nav_style: primary
+markdown_extensions:
+  - tables
+  - fenced_code
+  - toc:
+      permalink: true

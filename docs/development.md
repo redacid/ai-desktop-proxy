@@ -190,3 +190,54 @@ the packages and update metadata. The installer validates release names, URLs, p
 before passing the package to apt-get/dnf/zypper. Node's fallback distribution is checked against nodejs.org's
 SHASUMS256.txt; uv uses Astral's official installer. Tests replace commands in a temporary PATH and HOME; they
 never run real sudo/package managers or network calls. `make test-install` is included in `make check`.
+
+## Documentation site and screenshots
+
+The same files in `docs/` are readable as GitHub Markdown and build into a searchable MkDocs site. `mkdocs.yml`
+provides navigation; `docs/index.md` is the homepage and `docs/interface.md` is the illustrated tab tour. Screenshots
+are committed in `docs/images/`, so a site build requires no running app or browser.
+
+### Build and preview
+
+```bash
+python3 -m venv .venv-docs
+.venv-docs/bin/python -m pip install -r docs/requirements.txt
+make docs-build
+make docs-serve
+```
+
+Open `http://127.0.0.1:8000/`. The build uses strict mode: missing pages, links and images must be fixed. Generated
+`site/` and `.venv-docs/` are ignored. The Python environment is documentation-only, separate from the desktop app.
+
+### Refresh screenshots after a UI change
+
+```bash
+npm install --global playwright
+playwright install chromium
+make docs-screenshots
+```
+
+The screenshot script reuses Playwright's local/global installation like `scripts/icons.mjs`; a custom installation
+can be passed with `PLAYWRIGHT_MODULE=/absolute/path/to/playwright`. It loads the production renderer, supplies
+`scripts/docs-fixture.mjs` through a read-only mock API and captures Overview, Savings, Tools and Settings at a fixed
+viewport, locale and timezone. It checks for renderer errors and horizontal overflow. No real home files, provider
+requests or systemd services are accessed. Screenshots show sample figures and tool versions, not current releases.
+Commit the regenerated PNG files with any relevant tour updates.
+
+### Publish on release
+
+The existing CI workflow builds the site on each push/pull request and uploads a Pages artifact. A separate Pages
+job waits for **both** the docs build and the deb/rpm release job to succeed on a version tag. It deploys the artifact
+from that same workflow run, so documentation matches the released revision. Branch/PR builds never deploy.
+This does not rely on a `release: published` event: releases created using `GITHUB_TOKEN` do not start another workflow.
+
+One-time repository setup after merging:
+
+1. In **Settings → Pages → Build and deployment**, select **GitHub Actions** as the source.
+2. If the `github-pages` environment has deployment restrictions, allow release tags (for example `*.*.*`).
+3. Push the next version tag as described above. The site is published at
+   `https://redacid.github.io/ai-desktop-proxy/`. The workflow needs `pages: write` and `id-token: write` only in
+   the deployment job; it does not create or force-push a `gh-pages` branch.
+
+The site serves the latest deployed release, without a separate archive per version. Git tags retain older Markdown
+and screenshots. To make documentation available before the next release, build/preview it locally.

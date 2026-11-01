@@ -81,3 +81,15 @@ test-release: ## Test version bumps and changelog generation in temporary Git re
 test-install: ## Check installer syntax and test package selection without system/network access
 	bash -n install.sh
 	python3 scripts/test_install.py
+
+.PHONY: docs-build docs-serve docs-screenshots
+DOCS_PYTHON ?= .venv-docs/bin/python
+
+docs-build: ## Build the documentation site with strict link validation
+	$(DOCS_PYTHON) -m mkdocs build --strict
+
+docs-serve: ## Preview the documentation site locally
+	$(DOCS_PYTHON) -m mkdocs serve --dev-addr 127.0.0.1:8000
+
+docs-screenshots: build ## Capture every tab with demo data (needs Playwright and Chromium)
+	node scripts/docs-screenshots.mjs
