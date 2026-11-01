@@ -260,6 +260,26 @@ function Stats({ stats }: { stats: CompressorStats }): React.JSX.Element {
 type Tab = 'overview' | 'savings' | 'tools' | 'settings'
 const TABS: [Tab, string][] = [['overview', 'Overview'], ['savings', 'Savings'], ['tools', 'Tools'], ['settings', 'Settings']]
 
+const SUMMARY: Record<AppStatus['overall'], string> = {
+  ok: 'Everything is running. Routed clients go through the local compressor.',
+  degraded: 'Running, but something needs a look. See the cards below.',
+  down: 'The proxy is not running, so no client is routed through it.',
+  unknown: 'Checking…'
+}
+
+// Outline icons (24-unit grid, stroked with the text colour) so tabs need no icon dependency.
+const ICONS: Record<Tab, string> = {
+  overview: 'M3 12h4l3-8 4 16 3-8h4',
+  savings: 'M3 3v18h18M8 17v-5M13 17V8M18 17v-9',
+  tools: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z',
+  settings: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6'
+}
+const TabIcon = ({ tab }: { tab: Tab }): React.JSX.Element => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d={ICONS[tab]} />
+  </svg>
+)
+
 export function App(): React.JSX.Element {
   const [status, setStatus] = useState<AppStatus | null>(null)
   const [busy, setBusy] = useState(false)
@@ -311,16 +331,20 @@ export function App(): React.JSX.Element {
   return (
     <main>
       <header className="top">
-        <h1>
-          <span className={`dot ${status.overall}`} /> Claude Desktop Proxy
-        </h1>
+        <div>
+          <h1>
+            <span className={`dot ${status.overall}`} /> Claude Desktop Proxy
+          </h1>
+          <p className="subtitle">{SUMMARY[status.overall]}</p>
+        </div>
         <div className="top-actions">
-          <button onClick={() => void window.api.refreshStatus().then(setStatus)}>Check now</button>
+          <button onClick={() => void window.api.refreshStatus().then(setStatus)}>↻ Check now</button>
         </div>
       </header>
       <nav className="tabs" role="tablist">
         {TABS.map(([id, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
+            <TabIcon tab={id} />
             {label}
             {id === 'overview' && <span className={`dot ${status.overall}`} />}
           </button>
@@ -384,7 +408,10 @@ export function App(): React.JSX.Element {
       )}
       {tab === 'savings' && (status.stats
         ? <Stats stats={status.stats} />
-        : <p className="detail">No headroom statistics yet: headroom is not answering at the configured URL.</p>)}
+        : <section className="card empty">
+            <h2>No savings to show yet</h2>
+            <p className="detail">headroom is not answering at the configured URL. Start it on the Overview tab, then send a few requests through the proxy.</p>
+          </section>)}
       <footer>
         Last check: {status.checkedAt ? new Date(status.checkedAt).toLocaleTimeString() : 'never'}
       </footer>

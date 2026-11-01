@@ -100,7 +100,7 @@ export function Tools({ disabled, onBusy, onLogStart }: {
 
   const clientName = (id: string): string => id.endsWith('codex') ? 'Codex' : 'Claude Code'
   const checked = (tool: ToolInfo): React.JSX.Element =>
-    <p className="detail">Version check: {tool.checkedAt ? new Date(tool.checkedAt).toLocaleString() : 'not checked yet'}</p>
+    <p className="checked">Version check: {tool.checkedAt ? new Date(tool.checkedAt).toLocaleString() : 'not checked yet'}</p>
 
   /** Per-client connection rows: RTK hooks or an MCP server registration. */
   const connectionRows = (tool: ToolInfo): React.JSX.Element => (

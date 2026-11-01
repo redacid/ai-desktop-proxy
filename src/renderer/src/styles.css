@@ -8,6 +8,8 @@
   --degraded: #e8a10c;
   --down: #d6336c;
   --unknown: #9a9a94;
+  --accent: #2f6fdb;
+  --shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 2px 8px rgb(0 0 0 / 4%);
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -17,6 +19,8 @@
     --text: #ecece8;
     --muted: #a3a39d;
     --border: #353533;
+    --accent: #7aa7f5;
+    --shadow: 0 1px 2px rgb(0 0 0 / 30%);
   }
 }
 * { box-sizing: border-box; }
@@ -26,12 +30,15 @@ body {
   color: var(--text);
   font: 14px/1.5 system-ui, sans-serif;
 }
-main { padding: 24px; }
+main { padding: 20px 24px 24px; max-width: 1600px; margin: 0 auto; }
 .loading { color: var(--muted); }
-.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; overflow-x: auto; }
-.tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); padding: 8px 14px; display: flex; align-items: center; gap: 6px; }
-.tabs button.active { color: var(--text); border-bottom-color: var(--text); font-weight: 600; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.subtitle { margin: 2px 0 0 20px; color: var(--muted); font-size: 13px; }
+.tabs { display: flex; gap: 4px; padding: 4px; margin-bottom: 18px; overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: 10px; width: fit-content; max-width: 100%; }
+.tabs button { border: none; border-radius: 7px; background: none; color: var(--muted); padding: 7px 14px; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.tabs button:hover { color: var(--text); background: var(--bg); }
+.tabs button.active { color: var(--text); background: color-mix(in srgb, var(--accent) 14%, var(--card)); font-weight: 600; }
+.tabs button.active svg { color: var(--accent); }
 .tabs .dot { width: 8px; height: 8px; }
 h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 10px; }
 h2 { font-size: 15px; margin: 0; }
@@ -43,9 +50,14 @@ button {
   background: var(--card);
   color: var(--text);
   cursor: pointer;
+  transition: background .12s, border-color .12s;
 }
+button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--text) 25%, var(--border)); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; box-shadow: var(--shadow); }
+.card.empty { text-align: center; padding: 40px 18px; }
+.card.empty .detail { margin-top: 6px; }
 .card header { display: flex; align-items: center; gap: 8px; }
 .health { margin: 12px 0 4px; font-weight: 600; text-transform: capitalize; }
 .detail { margin: 0; color: var(--muted); }
@@ -159,15 +171,21 @@ code { font: 12px ui-monospace, monospace; }
 .settings input:disabled + span, .settings select:disabled { opacity: .5; }
 .settings select, .settings input[type="number"] { justify-self: start; width: 100%; }
 /* Optional client integrations do not change proxy health. */
-.tool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 .tools { margin-top: 0; }
 .tools > header { justify-content: space-between; }
 .tools > .detail { margin: 8px 0 14px; }
-.tool { min-width: 0; border: 1px solid var(--border, #333); border-radius: 8px; padding: 14px; }
+.tool { min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; background: var(--bg); }
+/* Actions and the version line sit at the bottom so cards in a row line up. */
+.tool > .lifecycle { margin-top: auto; }
+.tool > .checked { margin-top: auto; }
+.tool > .lifecycle + .checked { margin-top: 8px; }
+.checked { margin: 0; padding-top: 10px; font-size: 12px; color: var(--accent); }
+.tool > .lifecycle + .checked { padding-top: 0; }
 .tool .detail, .tool .note, .tool .error-inline { overflow-wrap: anywhere; white-space: pre-line; }
 .tool .tiles { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); margin: 8px 0; }
 .tool .tiles .value { font-size: 18px; }
 .tool .bars { height: 60px; }
 
-.lifecycle { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.lifecycle { padding-top: 12px; border-top: 1px solid var(--border); }
 button.danger { color: var(--down); border-color: color-mix(in srgb, var(--down) 50%, var(--border)); }
