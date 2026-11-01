@@ -55,5 +55,11 @@ running sessions keep their old settings.
 
 Done: Claude Code and Codex clients, mitmproxy service with headroom fallback, headroom service with its options in Settings,
 statistics with expandable recent requests, approved tool installation/update checks and RTK client connections, settings,
-start at login. Not yet: verified AppImage/deb packages, Cursor client, macOS.
+start at login. GitHub CI validates every push; version tags publish deb/rpm releases. Not yet: package installation smoke tests, Cursor client, macOS.
 Planned headroom improvements: diagnostics, quotas, detailed savings, CCR inspection and tuning; see [the project plan](docs/plan.md).
+
+## CI and releases
+
+GitHub Actions runs validation, tests and a build on every push and pull request. A pushed version tag such as
+`0.1.0` additionally builds Linux x64 deb/rpm packages and publishes them in a GitHub Release after checks pass.
+See [release instructions](docs/development.md#github-ci-and-releases).

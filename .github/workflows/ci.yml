@@ -1,0 +1,92 @@
+name: CI and release
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      release: ${{ steps.tag.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check release tag
+        id: tag
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          if [[ "$REF_TYPE" == tag && "$REF_NAME" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo 'release=true' >> "$GITHUB_OUTPUT"
+          fi
+      - run: npm ci
+      # Works even when npm is configured with ignore-scripts.
+      - run: node node_modules/electron/install.js
+      - run: make check
+      - run: make build
+
+  release:
+    needs: validate
+    if: github.event_name == 'push' && needs.validate.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends rpm
+      - run: npm ci
+      - run: node node_modules/electron/install.js
+      - run: make build
+      - name: Build deb and rpm with the tag version
+        run: npx --no-install electron-builder --linux deb rpm --x64 --publish never --config.extraMetadata.version="$RELEASE_VERSION"
+      - name: Validate packages
+        shell: bash
+        run: |
+          shopt -s nullglob
+          debs=(dist/*.deb)
+          rpms=(dist/*.rpm)
+          [[ ${#debs[@]} == 1 && ${#rpms[@]} == 1 ]]
+          [[ "$(dpkg-deb --field "${debs[0]}" Version)" == "$RELEASE_VERSION" ]]
+          [[ "$(rpm -qp --queryformat '%{VERSION}' "${rpms[0]}")" == "$RELEASE_VERSION" ]]
+          dpkg-deb --info "${debs[0]}"
+          rpm -qpi "${rpms[0]}"
+      - name: Create release and attach packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          # A draft keeps a partial upload out of the public release list.
+          # A failed upload can be retried by re-running this job.
+          if gh release view "$RELEASE_VERSION" >/dev/null 2>&1; then
+            [[ "$(gh release view "$RELEASE_VERSION" --json isDraft --jq .isDraft)" == true ]]
+          else
+            gh release create "$RELEASE_VERSION" --verify-tag --draft --title "AI Desktop Proxy $RELEASE_VERSION" --generate-notes
+          fi
+          gh release upload "$RELEASE_VERSION" dist/*.deb dist/*.rpm --clobber
+          gh release edit "$RELEASE_VERSION" --draft=false

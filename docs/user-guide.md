@@ -335,3 +335,9 @@ traffic never reaches your proxy. Use Remote Control or local sessions for work 
 
 **Undo everything.** Switch clients off, **Remove** both services, then optionally
 `uv tool uninstall mitmproxy` and `uv tool uninstall headroom-ai`.
+
+## Downloading release packages
+
+GitHub Releases publishes Linux x64 `.deb` and `.rpm` installers for version tags such as `0.1.0`.
+Download the package for your distribution from the corresponding release. Packages are built only after
+CI validation succeeds; CI checks package metadata, but does not test installation on every distribution.

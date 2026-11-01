@@ -14,7 +14,7 @@ Linux, Node.js 22+, npm, Python 3 (addon tests). `make` with no target lists eve
 | `make test` | vitest unit tests (`src/**/*.test.ts`) |
 | `make test-addon` | Python tests for the mitmproxy addon (no mitmproxy needed) |
 | `make check` | typecheck + test + test-addon: run before every commit |
-| `make dist`, `dist-appimage`, `dist-deb` | electron-builder packages into `dist/` (not verified yet) |
+| `make dist`, `dist-appimage`, `dist-deb` | electron-builder packages into `dist/`; default targets: AppImage, deb, rpm |
 | `make icons` | Regenerate every icon (SVG sources and PNGs) from `scripts/icons.mjs` |
 | `make clean`, `make distclean` | Remove `out/` and `dist/`; also `node_modules` |
 
@@ -114,3 +114,26 @@ uses it flat in the health colour (same values as `--ok`, `--degraded`, `--down`
 the app icon puts it on a dark rounded tile. The animated variant closes the chevrons in and shrinks the dot over
 1.2 s: `icon-src/*-animated.svg` animate with SMIL, and the tray plays the same motion from eight `tray/busy-N.png`
 frames (blue) while a service action runs. Below 48 px the app icon drops its sheen and draws the mark larger.
+
+## GitHub CI and releases
+
+`.github/workflows/ci.yml` runs on every push (branches and tags) and pull request: Node.js 22, Python 3.13,
+`npm ci`, Electron binary installation, `make check`, and `make build` on Ubuntu 24.04.
+
+Pushing a tag exactly matching `MAJOR.MINOR.PATCH`, without a `v` prefix or prerelease suffix (for example
+`0.1.0`), also builds Linux x64 deb and rpm packages after validation succeeds. The tag supplies the packaged
+app version via electron-builder's `extraMetadata.version`; it does not change the committed package.json.
+The job checks each package's version, creates a draft GitHub Release, uploads both packages, then publishes it
+with generated release notes. A failed upload leaves a draft and can be retried by re-running the job.
+Published releases are not overwritten. The release job uses the automatic `GITHUB_TOKEN` with `contents: write`;
+no personal token is needed. Repository policy must allow that permission.
+
+To release a committed revision, push it and its version tag:
+
+```bash
+git tag 0.1.0
+git push origin 0.1.0
+```
+
+Other tag formats still run checks but do not publish a release. Release packages are not code-signed.
+`npm run dist -- --rpm --x64 --publish never` can also build an rpm locally; Linux rpm tooling is required.

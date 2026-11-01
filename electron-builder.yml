@@ -8,7 +8,7 @@ extraResources:
   - from: resources
     to: resources
 linux:
-  target: [AppImage, deb]
+  target: [AppImage, deb, rpm]
   category: Development
   icon: resources/icons
   maintainer: Serhii <sr@ios.in.ua>
