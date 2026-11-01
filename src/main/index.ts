@@ -1,3 +1,5 @@
+import { AppUpdates } from './updates'
+import { autoUpdater } from 'electron-updater'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -44,6 +46,7 @@ let portsSeen: string | null = null
 
 // One userData dir for dev and packaged builds (Electron would derive it from productName there).
 app.setPath('userData', join(app.getPath('appData'), 'ai-desktop-proxy'))
+let appUpdates: AppUpdates | null = null
 const store = new AppStore(join(app.getPath('userData'), 'state.json'))
 const headroom = (): HeadroomBackend => new HeadroomBackend(store.settings.headroomUrl)
 const headroomService = new HeadroomService(() => store.settings, () => headroom().answering(), userUnitFile(HEADROOM_UNIT), undefined,
@@ -163,7 +166,7 @@ async function withPortCheck(step: () => Promise<string | null>, retry = step): 
 
 /** Serialises service actions and turns their outcome into an ActionResult for the UI. */
 async function exclusive(fn: () => Promise<string | null>): Promise<ActionResult> {
-  if (busy) return { ok: false, error: 'another action is still running', status: monitor.current }
+  if (busy || appUpdates?.current.phase === 'installing') return { ok: false, error: 'another action is still running', status: monitor.current }
   busy = true
   tray?.setBusy(true)
   try {
@@ -374,6 +377,20 @@ if (!app.requestSingleInstanceLock()) {
     if (moved.length) console.log(`Carried over from ${LEGACY_SLUG}: ${moved.join(', ')}`)
     await autostart.migrateFrom(LEGACY_AUTOSTART).catch((err) => console.error('Migrating autostart failed:', err))
     await store.load()
+    const packageType = await import('node:fs/promises').then((fs) => fs.readFile(join(process.resourcesPath, 'package-type'), 'utf8')).catch(() => '')
+    const supported = app.isPackaged && (['deb', 'rpm'].includes(packageType.trim()) || !!process.env.APPIMAGE)
+    appUpdates = new AppUpdates(supported ? autoUpdater : null, app.getVersion(),
+      join(app.getPath('userData'), 'updates.json'), () => busy)
+    appUpdates.on('change', (state) => win?.webContents.send(IPC.updateChanged, state))
+    ipcMain.handle(IPC.getUpdate, () => appUpdates!.current)
+    ipcMain.handle(IPC.updatePreferences, (_e, prefs) => appUpdates!.preferences(prefs))
+    ipcMain.handle(IPC.updateAction, (_e, action: string) => {
+      if (action === 'check') return appUpdates!.check()
+      if (action === 'download') return appUpdates!.download()
+      if (action === 'install') return appUpdates!.install()
+      throw new Error('Unknown update action')
+    })
+    void appUpdates.start().catch((err) => console.error('App update check failed:', err))
 
     ipcMain.handle(IPC.getStatus, () => monitor.current)
     ipcMain.handle(IPC.refreshStatus, async () => {
@@ -429,6 +446,7 @@ if (!app.requestSingleInstanceLock()) {
     clients.stop()
     monitor.stop()
     tools.stop()
+    appUpdates?.stop()
     tray?.destroy()
   })
 }

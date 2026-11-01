@@ -1,5 +1,44 @@
 # User guide
 
+## Installing a release
+
+Run this as your desktop user (not root, and do not pipe into `sudo bash`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/feat/electron-app/install.sh | bash
+```
+
+Supported: Linux x86_64 desktops with systemd and apt-get (Debian/Ubuntu), dnf (Fedora/RHEL), or zypper
+(openSUSE), Internet access, sudo privileges, and curl to fetch the installer. ARM releases are not built yet.
+If curl is missing, install it using your distribution's package manager first.
+
+The installer:
+
+- Installs system prerequisites (CA certificates, Python 3, Git, iproute and archive tools).
+- Finds the latest stable public GitHub Release, downloads its deb/rpm and verifies SHA-256 using `SHA256SUMS` (or the GitHub API asset digest for older releases).
+  Missing assets/checksum data or a checksum mismatch stop installation. The checksums detect a damaged download; packages
+  are not code-signed. Older releases work when GitHub provides their SHA-256 asset digest.
+- Keeps Node.js 20.18.1+ with npm/npx when available. Otherwise installs the official Node.js 22 distribution
+  under `/opt/ai-desktop-proxy-node/` with links in `/usr/local/bin`, after checking its SHA-256 checksum.
+  It refuses to overwrite unrelated files already in those link locations.
+- Installs missing uv/uvx with Astral's official installer into `~/.local/bin` without changing shell profiles.
+- Installs missing mitmproxy and `headroom-ai[all]` with `uv tool install --python 3.13`; uv can download Python
+  3.13 if needed. Headroom and its models/dependencies can require a substantial download.
+- Uses the native package manager to install the app and resolve its GUI/runtime dependencies.
+
+Open AI Desktop Proxy from the applications menu (restart an already running copy). In Overview, set up/start the
+Proxy and Compressor services, then turn on client routing. Optional tools, client CLIs and their account logins
+are configured separately. Installation does not enable services or change Claude/Codex routing. Settings, indexes
+and existing working tools are kept. Installed builds can subsequently update from inside the app.
+
+For download-and-review installation:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/feat/electron-app/install.sh -o install.sh
+less install.sh
+bash install.sh
+```
+
 ## Starting the app
 
 ```bash
@@ -341,3 +380,19 @@ traffic never reaches your proxy. Use Remote Control or local sessions for work 
 GitHub Releases publishes Linux x64 `.deb` and `.rpm` installers for version tags such as `0.1.0`.
 Download the package for your distribution from the corresponding release. Packages are built only after
 CI validation succeeds; CI checks package metadata, but does not test installation on every distribution.
+
+## App self-updates
+
+Installed deb/rpm packages (and AppImage builds) check GitHub Releases for a newer stable version on first launch,
+then every **2 hours** while the app runs. The last check is saved, so restarting the app does not reset the cadence.
+Development (`make run`) and unpacked builds show that updating is unavailable.
+
+**Settings → App updates** shows the current version, last check and switches for automatic checking and downloading
+(both on by default). **Check for updates** and **Download update** can be used manually. A notice on other tabs
+shows the new version, release notes and download progress; **Later** hides the notice for this run.
+
+Updates are downloaded and checksum-checked by electron-updater. Installation happens only after **Update and
+restart**; quitting normally does not install it. The app refuses installation while a service/tool operation is
+running; retry when that operation finishes. Installing deb/rpm can prompt for administrator authentication via the
+system installer. Proxy and headroom services keep running across the app restart. Preferences are stored in
+`~/.config/ai-desktop-proxy/updates.json`. The first release that includes this feature must be installed manually.

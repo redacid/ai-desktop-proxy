@@ -6,7 +6,7 @@ STAMP    := node_modules/.install-stamp
 ELECTRON := node_modules/electron/path.txt
 
 .DEFAULT_GOAL := help
-.PHONY: bump version test-release icons help install dev build run run-hidden typecheck test test-addon test-legacy lint check dist dist-appimage dist-deb clean distclean
+.PHONY: test-install bump version test-release icons help install dev build run run-hidden typecheck test test-addon test-legacy lint check dist dist-appimage dist-deb clean distclean
 
 help: ## Show this list
 	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  \033[36m%-14s\033[0m %s\n",$$1,$$2}'
@@ -48,7 +48,7 @@ test-legacy: ## Run the old settings_env.py test
 
 lint: typecheck ## Alias for typecheck until a linter is added
 
-check: typecheck test test-addon test-release ## Everything CI should run
+check: typecheck test test-addon test-release test-install ## Everything CI should run
 
 dist: build $(ELECTRON) ## Package AppImage and deb into dist/
 	$(NODE_BIN)/electron-builder --linux
@@ -77,3 +77,7 @@ version: ## Bump the version and prepend commits since the previous version to C
 
 test-release: ## Test version bumps and changelog generation in temporary Git repositories
 	python3 scripts/test_version.py
+
+test-install: ## Check installer syntax and test package selection without system/network access
+	bash -n install.sh
+	python3 scripts/test_install.py

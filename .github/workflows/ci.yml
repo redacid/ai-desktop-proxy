@@ -75,8 +75,12 @@ jobs:
           [[ ${#debs[@]} == 1 && ${#rpms[@]} == 1 ]]
           [[ "$(dpkg-deb --field "${debs[0]}" Version)" == "$RELEASE_VERSION" ]]
           [[ "$(rpm -qp --queryformat '%{VERSION}' "${rpms[0]}")" == "$RELEASE_VERSION" ]]
+          test -s dist/latest-linux.yml
           dpkg-deb --info "${debs[0]}"
           rpm -qpi "${rpms[0]}"
+      - name: Generate package checksums
+        working-directory: dist
+        run: sha256sum *.deb *.rpm > SHA256SUMS
       - name: Prepare release description
         run: VERSION="$RELEASE_VERSION" python3 scripts/version.py notes > release-notes.md
       - name: Create release and attach packages
@@ -92,5 +96,5 @@ jobs:
           else
             gh release create "$RELEASE_VERSION" --verify-tag --draft --title "AI Desktop Proxy $RELEASE_VERSION" --notes-file release-notes.md
           fi
-          gh release upload "$RELEASE_VERSION" dist/*.deb dist/*.rpm --clobber
+          gh release upload "$RELEASE_VERSION" dist/*.deb dist/*.rpm dist/latest-linux.yml dist/SHA256SUMS --clobber
           gh release edit "$RELEASE_VERSION" --notes-file release-notes.md --draft=false

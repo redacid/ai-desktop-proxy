@@ -228,6 +228,10 @@ export interface ActionResult {
 }
 
 export const IPC = {
+  getUpdate: 'update:get',
+  updateAction: 'update:action',
+  updatePreferences: 'update:preferences',
+  updateChanged: 'update:changed',
   getStatus: 'status:get',
   refreshStatus: 'status:refresh',
   statusChanged: 'status:changed',
@@ -247,6 +251,10 @@ export const IPC = {
 } as const
 
 export interface Api {
+  getUpdate(): Promise<AppUpdateState>
+  updateAction(action: 'check' | 'download' | 'install'): Promise<AppUpdateState>
+  updatePreferences(preferences: UpdatePreferences): Promise<AppUpdateState>
+  onUpdate(listener: (state: AppUpdateState) => void): () => void
   getStatus(): Promise<AppStatus>
   refreshStatus(): Promise<AppStatus>
   setClientEnabled(id: string, enabled: boolean): Promise<ActionResult>
@@ -263,4 +271,15 @@ export interface Api {
   onTools(listener: (tools: ToolInfo[]) => void): () => void
   onStatus(listener: (status: AppStatus) => void): () => void
   onInstallLog(listener: (line: string) => void): () => void
+}
+
+export interface UpdatePreferences { autoCheck: boolean; autoDownload: boolean }
+export interface AppUpdateState extends UpdatePreferences {
+  currentVersion: string
+  version: string | null
+  phase: 'disabled' | 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'installing' | 'error'
+  progress: number
+  notes: string
+  error: string | null
+  checkedAt: number | null
 }

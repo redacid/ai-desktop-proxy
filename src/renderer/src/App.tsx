@@ -1,3 +1,4 @@
+import { AppUpdates, useAppUpdates } from './AppUpdates'
 import { useEffect, useRef, useState } from 'react'
 import type {
   AppStatus,
@@ -281,6 +282,7 @@ const TabIcon = ({ tab }: { tab: Tab }): React.JSX.Element => (
 )
 
 export function App(): React.JSX.Element {
+  const appUpdate = useAppUpdates()
   const [status, setStatus] = useState<AppStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -356,6 +358,8 @@ export function App(): React.JSX.Element {
           <button onClick={() => setError(null)} aria-label="Dismiss">×</button>
         </div>
       )}
+      {tab !== 'settings' && <AppUpdates state={appUpdate} />}
+      {tab === 'settings' && <AppUpdates state={appUpdate} settings />}
       {tab === 'settings' && (
         <SettingsPanel onSaved={setStatus} headroomExternal={status.compressorInfo?.managed === 'external'} />
       )}
