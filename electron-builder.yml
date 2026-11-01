@@ -12,3 +12,9 @@ linux:
   category: Development
   icon: resources/icons
   maintainer: Serhii <sr@ios.in.ua>
+
+publish:
+  provider: github
+  owner: redacid
+  repo: ai-desktop-proxy
+  vPrefixedTagName: false

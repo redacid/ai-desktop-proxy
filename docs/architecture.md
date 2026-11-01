@@ -216,3 +216,12 @@ versions moves into `headroom.logMessages`.
 
 The services' unit files are regenerated from these settings; the app compares them with what it would write and
 shows **Apply** when they differ (`unit: outdated`), or when the unit came from `legacy/cdp.sh` (`legacy`).
+
+## App updater
+
+`updates.ts` owns app-update state independently from ToolManager (whose tool checks keep their existing cadence).
+It checks stable releases every two hours, persists preferences and last check in `updates.json`, handles download
+errors/progress, and permits explicit installation only when no service/tool action is running. Installation also
+blocks new service/tool actions. electron-updater verifies downloaded checksums and invokes the native installer;
+normal app quit never installs an update. Existing systemd services outlive the app. `AppUpdates.tsx` renders the
+Settings controls and the dismissible global notice, connected through the typed preload IPC.

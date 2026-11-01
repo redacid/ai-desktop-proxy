@@ -197,3 +197,9 @@ button.danger { color: var(--down); border-color: color-mix(in srgb, var(--down)
 .dashboards { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 13px; }
 .dashboards a { color: var(--accent); text-decoration: none; }
 .dashboards a:hover { text-decoration: underline; }
+
+.app-updates { margin-bottom: 16px; }
+.update-notice { border-color: var(--accent); }
+.update-option { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+.release-notes { white-space: pre-wrap; font: inherit; max-height: 240px; overflow: auto; }
+.app-updates progress { width: 100%; accent-color: var(--accent); }

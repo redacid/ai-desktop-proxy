@@ -1,7 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC, type Api, type AppStatus, type ToolInfo } from '@shared/ipc'
+import { IPC, type Api, type AppStatus, type ToolInfo, type AppUpdateState } from '@shared/ipc'
 
 const api: Api = {
+  getUpdate: () => ipcRenderer.invoke(IPC.getUpdate),
+  updateAction: (action) => ipcRenderer.invoke(IPC.updateAction, action),
+  updatePreferences: (prefs) => ipcRenderer.invoke(IPC.updatePreferences, prefs),
+  onUpdate: (listener) => {
+    const handler = (_: unknown, state: AppUpdateState): void => listener(state)
+    ipcRenderer.on(IPC.updateChanged, handler)
+    return () => ipcRenderer.removeListener(IPC.updateChanged, handler)
+  },
   getStatus: () => ipcRenderer.invoke(IPC.getStatus),
   refreshStatus: () => ipcRenderer.invoke(IPC.refreshStatus),
   setClientEnabled: (id, enabled) => ipcRenderer.invoke(IPC.setClientEnabled, id, enabled),

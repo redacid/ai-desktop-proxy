@@ -27,7 +27,30 @@ What the app does:
 - detects RTK and Ponytail per client, offers installation, and checks headroom/RTK/Ponytail updates every six
   hours; installs, updates and RTK hook connections require approval with the exact commands or download steps.
 
-## Quick start
+## Install on Linux
+
+On a Linux x64 desktop with systemd (Debian/Ubuntu, Fedora/RHEL or openSUSE), run as your normal user:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/feat/electron-app/install.sh | bash
+```
+
+The installer downloads the latest stable GitHub Release, verifies its SHA-256 checksum, and installs the deb/rpm
+with its runtime dependencies (sudo is requested). It also installs missing uv/uvx, Node.js/npm, mitmproxy and
+headroom. Existing working tools are kept. Optional tools remain selectable in the app. Open **AI Desktop Proxy**
+from the applications menu, set up the Proxy and Compressor services, then enable your clients.
+
+Releases must provide `SHA256SUMS` or a SHA-256 asset digest through GitHub. To inspect the installer first:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/feat/electron-app/install.sh -o install.sh
+less install.sh
+bash install.sh
+```
+
+See [installation details](docs/user-guide.md#installing-a-release) for prerequisites and file locations.
+
+## Quick start (from source)
 
 Requirements: Linux with systemd user services, Node.js 22+, npm, [uv](https://docs.astral.sh/uv/), `ss` (iproute2).
 
@@ -66,3 +89,6 @@ See [release instructions](docs/development.md#github-ci-and-releases).
 
 Use `make bump` to increment the app version, or `make version VERSION=0.2.0` to also prepare CHANGELOG.md.
 GitHub Release descriptions use that version’s changelog section.
+
+Installed builds support app self-updates from GitHub Releases: checks every two hours, optional automatic
+background downloads, changelog display and explicit **Update and restart**. Development builds disable updating.

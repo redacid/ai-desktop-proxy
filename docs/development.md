@@ -165,3 +165,28 @@ git push origin 0.2.0
 CI checks out full Git history and uses the matching CHANGELOG.md section as the GitHub Release description.
 If a tag has no changelog section, the description is generated directly from the same Git commit range.
 The version/changelog helper tests use temporary repositories and run as part of `make check` (`test-release`).
+
+## Self-update delivery
+
+`src/main/updates.ts` wraps electron-updater with a durable two-hour check cadence, manual installation and typed
+IPC. The renderer subscribes to state/progress; it never receives an installer path or executes commands. Backend
+and clock are injected in unit tests; tests never download or install an update. Preferences/last check live in
+`userData/updates.json`. Only packaged deb/rpm (electron-builder's `resources/package-type`) and AppImage builds
+are eligible. `autoInstallOnAppQuit`, prereleases and downgrades are disabled.
+
+`electron-builder.yml` uses the public GitHub repository `redacid/ai-desktop-proxy` as the update provider with
+plain version tags. Along with deb/rpm, the release workflow must upload the generated `latest-linux.yml`, whose
+file entries include package checksums. The package embeds `app-update.yml` and its package type so electron-updater
+selects the matching installer. Metadata and both packages are uploaded before the draft release is published.
+An end-to-end update test requires two packaged versions published to the configured release feed; unit tests
+and a development build cannot validate administrator authentication or distribution-specific installation.
+
+## Bootstrap installer
+
+The root `install.sh` is a standalone Bash script served directly from the maintained `feat/electron-app` branch.
+It supports `curl | bash` without a checkout or npm build. It only runs package-manager commands as root; uv,
+mitmproxy and headroom belong to the invoking desktop user. The release workflow uploads `SHA256SUMS` alongside
+the packages and update metadata. The installer validates release names, URLs, package identity/version and SHA-256
+before passing the package to apt-get/dnf/zypper. Node's fallback distribution is checked against nodejs.org's
+SHASUMS256.txt; uv uses Astral's official installer. Tests replace commands in a temporary PATH and HOME; they
+never run real sudo/package managers or network calls. `make test-install` is included in `make check`.
