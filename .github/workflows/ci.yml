@@ -98,3 +98,44 @@ jobs:
           fi
           gh release upload "$RELEASE_VERSION" dist/*.deb dist/*.rpm dist/latest-linux.yml dist/SHA256SUMS --clobber
           gh release edit "$RELEASE_VERSION" --notes-file release-notes.md --draft=false
+
+  docs:
+    name: Build documentation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
+      - run: python -m pip install -r docs/requirements.txt
+      - run: make docs-build DOCS_PYTHON=python
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+  pages:
+    name: Publish release documentation
+    needs: [release, docs]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy documentation from the released revision
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -65,8 +65,16 @@ running sessions keep their old settings.
 
 ## Documentation
 
+[Illustrated interface tour](docs/interface.md) · [Documentation site](https://redacid.github.io/ai-desktop-proxy/)
+
+![AI Desktop Proxy Overview tab](docs/images/overview.png)
+
+The screenshots use demonstration data. The site is published from the released revision after a successful
+GitHub Release, once GitHub Pages is enabled in the repository settings.
+
 | Document | For |
 |---|---|
+| [docs/interface.md](docs/interface.md) | Screenshots of every tab and what each control does |
 | [docs/user-guide.md](docs/user-guide.md) | Using the app: cards, actions, settings, troubleshooting |
 | [docs/architecture.md](docs/architecture.md) | How it works: processes, modules, files it writes, safety rules |
 | [docs/development.md](docs/development.md) | Building, testing, extending (new clients, compressors) |
@@ -78,7 +86,7 @@ running sessions keep their old settings.
 
 Done: Claude Code and Codex clients, mitmproxy service with headroom fallback, headroom service with its options in Settings,
 statistics with expandable recent requests, approved tool installation/update checks and RTK client connections, settings,
-start at login. GitHub CI validates every push; version tags publish deb/rpm releases. Not yet: package installation smoke tests, Cursor client, macOS.
+start at login. Illustrated documentation builds into GitHub Pages on release. GitHub CI validates every push; version tags publish deb/rpm releases. Not yet: package installation smoke tests, Cursor client, macOS.
 Planned headroom improvements: diagnostics, quotas, detailed savings, CCR inspection and tuning; see [the project plan](docs/plan.md).
 
 ## CI and releases

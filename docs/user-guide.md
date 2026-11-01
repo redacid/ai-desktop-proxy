@@ -1,5 +1,7 @@
 # User guide
 
+New to the app? Follow the [illustrated interface tour](interface.md) for screenshots and explanations of every tab.
+
 ## Installing a release
 
 Run this as your desktop user (not root, and do not pipe into `sudo bash`):
@@ -60,7 +62,7 @@ The window has four tabs:
 |---|---|
 | Overview | Proxy, Compressor and Clients cards; its dot repeats the overall state |
 | Savings | headroom savings and recent requests |
-| Tools | Tools & updates: headroom, RTK, Ponytail, Chisle, Serena, MarkItDown |
+| Tools | Tools & updates: headroom, RTK, Ponytail, Chisle, Serena, MarkItDown, Context7, Codebase Memory |
 | Settings | App and headroom settings |
 
 Errors and the Install log stay visible on every tab, and a running tool action keeps going when you switch tabs.
