@@ -168,3 +168,6 @@ code { font: 12px ui-monospace, monospace; }
 .tool .tiles { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); margin: 8px 0; }
 .tool .tiles .value { font-size: 18px; }
 .tool .bars { height: 60px; }
+
+.lifecycle { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+button.danger { color: var(--down); border-color: color-mix(in srgb, var(--down) 50%, var(--border)); }

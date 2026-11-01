@@ -288,7 +288,8 @@ const compressorAction = (action: CompressorAction): Promise<ActionResult> =>
 
 async function toolAction(id: ToolId, action: ToolAction): Promise<ToolActionResult> {
   const verb = action.startsWith('disconnect-') ? 'Disconnect' : action.startsWith('connect-') ? 'Connect'
-    : action === 'remove' ? 'Remove' : action === 'update' ? 'Update' : 'Install'
+    : action === 'remove' || action === 'uninstall' ? 'Remove' : action === 'stop' ? 'Stop' : action === 'start' ? 'Start'
+    : action === 'update' ? 'Update' : 'Install'
   const result = await exclusive(async () => {
     const approved = await approveToolAction(tools, id, action, (plan) => confirm(
       `${verb} ${tools.current.find((t) => t.id === id)?.name ?? id}?`,

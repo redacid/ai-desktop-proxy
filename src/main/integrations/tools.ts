@@ -336,6 +336,7 @@ export class ToolManager extends EventEmitter {
             const plugin = pluginInfo(JSON.parse(r.stdout), codex, PLUGINS[key].plugin)
             info.installed = plugin.installed
             info.version = plugin.version
+            if (plugin.installed) info.enabled = plugin.enabled
             if (plugin.installed && !codex) info.stats = key === 'ponytail' ? await this.ponytailStats(plugin.version) : await this.chisleStats()
             info.detail = plugin.installed ? `${plugin.enabled ? 'Enabled' : 'Installed but disabled'}. Restart the client after changes.`
               : `Install the official ${PLUGINS[key].name} plugin for this client.`
@@ -411,7 +412,7 @@ export class ToolManager extends EventEmitter {
 
   /** Build reviewable commands before the confirmation dialog; this never installs anything. */
   async plan(id: ToolId, action: ToolAction): Promise<ToolPlan> {
-    if (!IDS.includes(id) || !['install', 'update', 'connect-claude', 'connect-codex', 'disconnect-claude', 'disconnect-codex', 'remove'].includes(action)) throw new Error('Unknown tool action')
+    if (!IDS.includes(id) || !['install', 'update', 'connect-claude', 'connect-codex', 'disconnect-claude', 'disconnect-codex', 'remove', 'stop', 'start', 'uninstall'].includes(action)) throw new Error('Unknown tool action')
     await this.refresh()
     const info = this.tools.find((e) => e.id === id)!
     if (info.blocked) throw new Error(info.blocked)
@@ -419,6 +420,7 @@ export class ToolManager extends EventEmitter {
     if (action === 'update' && !info.updateAvailable) throw new Error('No newer stable version is available')
     const commands: Command[] = []
     const plan: ToolPlan = { id, action, commands, version: info.latest, detail: '' }
+    if (action === 'stop' || action === 'start' || action === 'uninstall') return this.lifecyclePlan(info, action, plan)
     const mcp = mcpKey(id)
     if (mcp) return this.mcpPlan(info, mcp, action, plan)
     if (action.startsWith('disconnect-')) {
@@ -497,6 +499,82 @@ export class ToolManager extends EventEmitter {
     return plan
   }
 
+  /**
+   * Machine-wide actions on a whole tool. stop: take it out of every client but keep it installed
+   * (RTK hooks, MCP registrations; plugins are disabled, which only Claude Code supports).
+   * start: re-enable disabled plugins. uninstall: stop, then remove what the app installed.
+   */
+  private async lifecyclePlan(info: ToolInfo, action: 'stop' | 'start' | 'uninstall', plan: ToolPlan): Promise<ToolPlan> {
+    const clients = ['claude', 'codex'] as const
+    const label = (c: 'claude' | 'codex'): string => c === 'codex' ? 'Codex' : 'Claude Code'
+    const cli = async (c: 'claude' | 'codex'): Promise<string> => {
+      const found = await this.find(c)
+      if (!found) throw new Error(`${label(c)} CLI not found`)
+      return found
+    }
+    const notes: string[] = []
+    const key = pluginKey(info.id)
+    const mcp = mcpKey(info.id)
+    if (info.id === 'rtk') {
+      if (action === 'start') throw new Error('Connect RTK to a client with its switch')
+      const binary = await this.rtkBinary()
+      if (!binary) throw new Error('RTK is not installed')
+      if (action === 'uninstall' && binary !== this.binary) throw new Error(`RTK at ${binary} was installed outside this app; remove it with its package manager`)
+      for (const c of clients.filter((c) => info.connected?.[c])) {
+        plan.commands.push({ cmd: binary, args: ['init', '-g', ...(c === 'codex' ? ['--codex'] : []), '--uninstall'] })
+      }
+      notes.push(action === 'stop' ? 'Removes RTK hooks and instructions from every client; the binary stays.'
+        : `Removes RTK hooks and instructions from every client, then deletes ${this.binary}${await this.ownsRtkLink() ? ` and the ${this.rtkLink} symlink` : ''}. RTK's savings history stays.`)
+    } else if (key) {
+      const { name, plugin, marketplace, repo } = PLUGINS[key]
+      const group = this.tools.filter((t) => pluginKey(t.id) === key)
+      const claude = group.find((t) => t.id.endsWith('-claude'))
+      if (action === 'stop' || action === 'start') {
+        const want = action === 'start'
+        if (claude?.installed && claude.enabled !== want) {
+          plan.commands.push({ cmd: await cli('claude'), args: ['plugin', want ? 'enable' : 'disable', plugin, '--scope', 'user'] })
+        }
+        notes.push(`${want ? 'Enables' : 'Disables'} ${name} in Claude Code; it stays installed.`)
+        if (group.some((t) => t.id.endsWith('-codex') && t.installed)) notes.push('Codex has no plugin disable; use the Codex switch to uninstall it there.')
+      } else {
+        for (const t of group.filter((t) => t.installed)) {
+          const c = t.id.endsWith('-codex') ? 'codex' : 'claude'
+          plan.commands.push({ cmd: await cli(c), args: c === 'codex' ? ['plugin', 'remove', plugin] : ['plugin', 'uninstall', plugin, '--scope', 'user'] })
+        }
+        for (const c of clients) {
+          const found = await this.find(c)
+          if (!found) continue
+          const list = await this.runner(found, ['plugin', 'marketplace', 'list', '--json'])
+          const raw: unknown = list.code === 0 ? JSON.parse(list.stdout) : []
+          const entries = Array.isArray(raw) ? raw : object(raw).marketplaces
+          const existing = Array.isArray(entries) ? entries.map(object).find((e) => e.name === marketplace) : undefined
+          // A marketplace of that name from elsewhere is not ours to remove.
+          if (existing && officialSource(existing, repo)) plan.commands.push({ cmd: found, args: ['plugin', 'marketplace', 'remove', marketplace] })
+        }
+        notes.push(`Uninstalls ${name} from every client and removes its ${repo} marketplace.`)
+      }
+    } else if (mcp) {
+      if (action === 'start') throw new Error(`Connect ${info.name} to a client with its switch`)
+      for (const c of clients.filter((c) => info.connected?.[c] && !info.foreign?.[c])) {
+        plan.commands.push({ cmd: await cli(c), args: c === 'codex' ? ['mcp', 'remove', info.id] : ['mcp', 'remove', '--scope', 'user', info.id] })
+      }
+      if (clients.some((c) => info.foreign?.[c])) notes.push(`${info.name} set up outside this app is left alone.`)
+      if (action === 'uninstall') {
+        const uv = await this.find('uv')
+        if (uv) plan.commands.push({ cmd: uv, args: ['cache', 'clean', MCP_SERVERS[mcp].pkg] })
+        notes.unshift(`Removes ${info.name} from every client and clears its packages from the uv cache.`)
+      } else notes.unshift(`Removes the ${info.name} registration from every client; nothing is deleted.`)
+    } else throw new Error(`${info.name} is managed on its own card`)
+    if (!plan.commands.length && !(info.id === 'rtk' && action === 'uninstall')) throw new Error(`Nothing to ${action}: ${info.name} is not active in any client`)
+    plan.detail = `${notes.join(' ')} Restart client sessions afterward.`
+    if (plan.commands.length) plan.detail += `\n\nCommands (executed without a shell):\n${plan.commands.map(formatCommand).join('\n')}`
+    return plan
+  }
+
+  private async ownsRtkLink(): Promise<boolean> {
+    try { return (await fs.lstat(this.rtkLink)).isSymbolicLink() && await fs.readlink(this.rtkLink) === this.binary } catch { return false }
+  }
+
   /** Connect, disconnect or re-pin an MCP server with the clients' own `mcp add/remove` commands. */
   private async mcpPlan(info: ToolInfo, key: McpKey, action: ToolAction, plan: ToolPlan): Promise<ToolPlan> {
     const { pkg, uv, args } = MCP_SERVERS[key]
@@ -551,6 +629,11 @@ export class ToolManager extends EventEmitter {
         const code = await this.stream(command.cmd, command.args, log)
         if (code !== 0) throw new Error(`${command.cmd} exited with ${code}. Earlier commands may have completed; check the log before retrying.`)
       }
+      if (plan.id === 'rtk' && plan.action === 'uninstall') {
+        if (await this.ownsRtkLink()) await fs.rm(this.rtkLink)
+        await fs.rm(this.binary, { force: true })
+        log(`Removed ${this.binary}`)
+      }
       if (plan.id === 'headroom' && plan.restartHeadroom) {
         const service = await this.deps.headroomInfo()
         if (service.managed === 'external') throw new Error('Package installed, but the service is now external and was not restarted')
@@ -560,6 +643,11 @@ export class ToolManager extends EventEmitter {
     } finally { this.mutation = false; await this.refresh() }
     const info = this.tools.find((e) => e.id === plan.id)!
     const client = plan.action.endsWith('-codex') ? 'codex' : 'claude'
+    const group = pluginKey(plan.id) ? this.tools.filter((t) => pluginKey(t.id) === pluginKey(plan.id)) : [info]
+    const ours = (t: ToolInfo): boolean => (['claude', 'codex'] as const).some((c) => t.connected?.[c] && !t.foreign?.[c])
+    if (plan.action === 'stop' && (pluginKey(plan.id) ? group.some((t) => t.id.endsWith('-claude') && t.enabled) : ours(info))) throw new Error(`Commands completed, but ${info.name} is still active.`)
+    if (plan.action === 'start' && group.some((t) => t.id.endsWith('-claude') && t.installed && !t.enabled)) throw new Error(`Commands completed, but ${info.name} is still disabled.`)
+    if (plan.action === 'uninstall' && (pluginKey(plan.id) ? group.some((t) => t.installed) : plan.id === 'rtk' ? await this.rtkBinary() === this.binary || ours(info) : ours(info))) throw new Error(`Commands completed, but ${info.name} is still present.`)
     if (plan.action === 'remove' && info.installed !== false) throw new Error(`Command completed, but ${info.name} is still listed as installed. ${info.error ?? 'Check the client plugin manager.'}`)
     if (plan.action.startsWith('disconnect-') && info.connected?.[client] !== false) throw new Error(`Command completed, but ${info.name} still shows as connected to ${client === 'codex' ? 'Codex' : 'Claude Code'}.`)
     if (mcpKey(plan.id) && plan.action.startsWith('connect-') && info.version !== plan.version) throw new Error(`Command completed, but ${info.name} ${plan.version} is not registered in ${client === 'codex' ? 'Codex' : 'Claude Code'}.`)

@@ -28,7 +28,7 @@ async function fixture() {
     rtkVersion: '0.49.0', headroomVersion: '0.40.0', ponyVersion: '5.3.0',
     ponyInstalled: true, codexInstalled: false, marketplace: true, foreignMarketplace: false,
     active: true, managed: 'ours' as CompressorInfo['managed'], local: true,
-    streamCode: 0, failVerification: false, rtkClaude: true
+    streamCode: 0, failVerification: false, rtkClaude: true, ponyEnabled: true
   }
   const service = vi.fn(async (): Promise<CompressorInfo> => ({
     binary: state.missingHeadroom ? null : '/fake/headroom', uv: '/fake/uv', unit: 'current', active: state.active,
@@ -48,11 +48,14 @@ async function fixture() {
     if (state.failDetection) return { code: 1, stdout: '', stderr: 'plugin API unavailable' }
     return { code: 0, stdout: JSON.stringify(cmd.endsWith('codex')
       ? { installed: state.codexInstalled ? [{ pluginId: 'ponytail@ponytail', version: state.ponyVersion, enabled: true }] : [] }
-      : state.ponyInstalled ? [{ id: 'ponytail@ponytail', version: state.ponyVersion, enabled: true, scope: 'user' }] : []), stderr: '' }
+      : state.ponyInstalled ? [{ id: 'ponytail@ponytail', version: state.ponyVersion, enabled: state.ponyEnabled, scope: 'user' }] : []), stderr: '' }
   })
   const stream = vi.fn(async (cmd: string, args: string[], _log: (line: string) => void) => {
     if (state.streamCode) return state.streamCode
     if (args.includes('--uninstall')) { state.rtkClaude = false; return 0 }
+    if (args[1] === 'disable' || args[1] === 'enable') { state.ponyEnabled = args[1] === 'enable'; return 0 }
+    if (args[1] === 'marketplace' && args[2] === 'remove') { state.marketplace = false; return 0 }
+    if (args[0] === 'mcp' || args[0] === 'cache') return 0
     if (args[1] === 'uninstall' || args[1] === 'remove') { state.ponyInstalled = state.codexInstalled = false; return 0 }
     if (cmd.endsWith('uv')) { state.headroomVersion = '0.41.0'; state.missingHeadroom = false }
     if (cmd.endsWith('claude')) { state.ponyInstalled = true; state.ponyVersion = '5.4.0' }
@@ -460,5 +463,63 @@ describe('MCP servers and Chisle', () => {
       { cmd: '/fake/claude', args: ['plugin', 'marketplace', 'add', 'JayPokale/Chisle'] },
       { cmd: '/fake/claude', args: ['plugin', 'install', 'chisle@chisle', '--scope', 'user'] }
     ])
+  })
+})
+
+describe('stop, start and remove from system', () => {
+  it('disables and re-enables a plugin in Claude Code without uninstalling it', async () => {
+    const f = await fixture()
+    const stop = await f.manager.plan('ponytail-claude', 'stop')
+    expect(stop.commands).toEqual([{ cmd: '/fake/claude', args: ['plugin', 'disable', 'ponytail@ponytail', '--scope', 'user'] }])
+    await f.manager.execute(stop, () => {})
+    expect(f.manager.current.find((t) => t.id === 'ponytail-claude')).toMatchObject({ installed: true, enabled: false })
+    await f.manager.execute(await f.manager.plan('ponytail-claude', 'start'), () => {})
+    expect(f.manager.current.find((t) => t.id === 'ponytail-claude')!.enabled).toBe(true)
+  })
+
+  it('uninstalls a plugin from every client and removes only the official marketplace', async () => {
+    const f = await fixture()
+    f.state.codexInstalled = true
+    await f.manager.refresh(true)
+    const plan = await f.manager.plan('ponytail-claude', 'uninstall')
+    expect(plan.commands.map((c) => [c.cmd, ...c.args].join(' '))).toEqual([
+      '/fake/claude plugin uninstall ponytail@ponytail --scope user',
+      '/fake/codex plugin remove ponytail@ponytail',
+      '/fake/claude plugin marketplace remove ponytail',
+      '/fake/codex plugin marketplace remove ponytail'
+    ])
+    await f.manager.execute(plan, () => {})
+    f.state.foreignMarketplace = true
+    f.state.ponyInstalled = true
+    await f.manager.refresh(true)
+    expect((await f.manager.plan('ponytail-claude', 'uninstall')).commands.some((c) => c.args.includes('marketplace'))).toBe(false)
+  })
+
+  it('stops RTK by unhooking connected clients and refuses to delete a binary it did not install', async () => {
+    const f = await fixture()
+    expect((await f.manager.plan('rtk', 'stop')).commands).toEqual([{ cmd: '/fake/rtk', args: ['init', '-g', '--uninstall'] }])
+    await expect(f.manager.plan('rtk', 'uninstall')).rejects.toThrow(/outside this app/)
+  })
+
+  it('deletes the app-managed RTK and its symlink', async () => {
+    const f = await fixture()
+    await approveToolAction(f.manager, 'rtk', 'update', async () => true, () => {})
+    const binary = join(f.root, 'tools/rtk')
+    const plan = await f.manager.plan('rtk', 'uninstall')
+    await f.manager.execute(plan, () => {})
+    await expect(fs.access(binary)).rejects.toThrow()
+    await expect(fs.lstat(join(f.root, 'home/.local/bin/rtk'))).rejects.toThrow()
+  })
+
+  it('removes only its own MCP registrations and clears the uv cache', async () => {
+    const f = await fixture()
+    const home = join(f.root, 'home')
+    await fs.mkdir(join(home, '.codex'), { recursive: true })
+    await fs.writeFile(join(home, '.claude.json'), JSON.stringify({ mcpServers: { serena: { command: '/fake/uvx', args: ['--from', 'serena-agent==0.41.0', 'serena'] } } }))
+    await fs.writeFile(join(home, '.codex', 'config.toml'), '[mcp_servers.serena]\ncommand = "serena-mcp"\n')
+    await f.manager.refresh(true)
+    expect((await f.manager.plan('serena', 'stop')).commands).toEqual([{ cmd: '/fake/claude', args: ['mcp', 'remove', '--scope', 'user', 'serena'] }])
+    expect((await f.manager.plan('serena', 'uninstall')).commands.at(-1)).toEqual({ cmd: '/fake/uv', args: ['cache', 'clean', 'serena-agent'] })
+    await expect(f.manager.plan('serena', 'start')).rejects.toThrow(/switch/)
   })
 })

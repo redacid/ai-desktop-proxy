@@ -154,6 +154,17 @@ appear in the Install log. Missing optional tools do not turn the proxy's health
   never changed. State is read from `~/.claude.json` (`mcpServers`) and `$CODEX_HOME/config.toml`
   (`mcp_servers`). uvx downloads the release on the client's next start.
 
+**Stop / Start / Remove from system.** RTK, Serena, MarkItDown, Ponytail and Chisle cards end with machine-wide
+buttons; each opens a confirmation that lists its commands, and the app checks the result afterwards.
+
+| Tool | Stop (keeps it installed) | Remove from system |
+|---|---|---|
+| RTK | `rtk init -g [--codex] --uninstall` for every connected client | Stop, then delete the app-managed binary and its `~/.local/bin/rtk` symlink. An RTK installed elsewhere is refused. Savings history stays |
+| Serena, MarkItDown | Remove the app's registration from every client | Stop, then `uv cache clean <package>` |
+| Ponytail, Chisle | `claude plugin disable … --scope user`; **Start** enables it again. Codex has no plugin disable, so there only its switch (uninstall) applies | Uninstall from every client, then remove the official marketplace (`plugin marketplace remove`); a marketplace of that name from another source stays |
+
+Registrations or marketplaces set up outside the app are never touched.
+
 Each card also shows what the tool achieved, refreshed with the presence check:
 
 - **RTK:** tokens saved, average saving and commands filtered, plus tokens saved per day for the last 14 days,

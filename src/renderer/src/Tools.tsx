@@ -120,6 +120,17 @@ export function Tools({ disabled, onBusy, onLogStart }: {
     </ul>
   )
 
+  const ours = (t: ToolInfo): boolean => (['claude', 'codex'] as const).some((c) => t.connected?.[c] && !t.foreign?.[c])
+  /** Machine-wide Stop / Start / Remove; each opens a confirmation listing its commands. */
+  const lifecycle = (id: ToolId, can: { stop?: boolean; start?: boolean; remove?: boolean }): React.JSX.Element | null =>
+    can.stop || can.start || can.remove ? (
+      <div className="actions lifecycle">
+        {can.start && <button disabled={locked} onClick={() => void act(id, 'start')}>Start</button>}
+        {can.stop && <button disabled={locked} onClick={() => void act(id, 'stop')}>Stop</button>}
+        {can.remove && <button className="danger" disabled={locked} onClick={() => void act(id, 'uninstall')}>Remove from system</button>}
+      </div>
+    ) : null
+
   /** One card per plugin with a row per client, whose switch installs or uninstalls it there. */
   const pluginCard = (name: string, group: ToolInfo[]): React.JSX.Element | null => group.length ? (
     <article className="tool" key={name}>
@@ -131,7 +142,8 @@ export function Tools({ disabled, onBusy, onLogStart }: {
       <ul className="clients">
         {group.map((tool) => (
           <Row key={tool.id} name={clientName(tool.id)} on={tool.installed === true}
-            badge={version(tool)} warn={tool.updateAvailable}
+            badge={tool.installed && tool.enabled === false ? `${version(tool)} · disabled` : version(tool)}
+            warn={tool.updateAvailable || (tool.installed === true && tool.enabled === false)}
             canToggle={!tool.blocked && tool.installed !== null}
             title={tool.installed ? `Uninstall ${name} from this client` : `Install ${name} for this client`}
             onToggle={(on) => void act(tool.id, on ? 'install' : 'remove')}>
@@ -141,6 +153,14 @@ export function Tools({ disabled, onBusy, onLogStart }: {
           </Row>
         ))}
       </ul>
+      {(() => {
+        const claude = group.find((t) => t.id.endsWith('-claude'))
+        return lifecycle(claude?.id ?? group[0].id, {
+          stop: claude?.installed === true && claude.enabled === true,
+          start: claude?.installed === true && claude.enabled === false,
+          remove: group.some((t) => t.installed === true)
+        })
+      })()}
       {checked(group[0])}
     </article>
   ) : null
@@ -172,6 +192,7 @@ export function Tools({ disabled, onBusy, onLogStart }: {
               {updateButton(tool)}
             </div>
             {tool.installed === true && tool.connected && connectionRows(tool)}
+            {tool.id !== 'headroom' && tool.installed === true && lifecycle(tool.id, { stop: ours(tool), remove: true })}
             {checked(tool)}
           </article>
         ))}
