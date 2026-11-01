@@ -193,6 +193,4 @@ button.danger { color: var(--down); border-color: color-mix(in srgb, var(--down)
 .tool-title { display: flex; align-items: baseline; gap: 6px; }
 .tool-title a { color: var(--accent); text-decoration: none; font-weight: normal; font-size: 13px; }
 .tool-title a:hover { text-decoration: underline; }
-.tool[title] { cursor: help; }
-.tool[title] button, .tool[title] a, .tool[title] .switch { cursor: pointer; }
 .service { margin: 8px 0 0; display: flex; align-items: center; gap: 6px; font-size: 13px; }
