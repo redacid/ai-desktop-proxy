@@ -124,7 +124,7 @@ Pushing a tag exactly matching `MAJOR.MINOR.PATCH`, without a `v` prefix or prer
 `0.1.0`), also builds Linux x64 deb and rpm packages after validation succeeds. The tag supplies the packaged
 app version via electron-builder's `extraMetadata.version`; it does not change the committed package.json.
 The job checks each package's version, creates a draft GitHub Release, uploads both packages, then publishes it
-with generated release notes. A failed upload leaves a draft and can be retried by re-running the job.
+with the version’s changelog section (or a generated commit list when no section exists). A failed upload leaves a draft and can be retried by re-running the job.
 Published releases are not overwritten. The release job uses the automatic `GITHUB_TOKEN` with `contents: write`;
 no personal token is needed. Repository policy must allow that permission.
 
@@ -137,3 +137,31 @@ git push origin 0.1.0
 
 Other tag formats still run checks but do not publish a release. Release packages are not code-signed.
 `npm run dist -- --rpm --x64 --publish never` can also build an rpm locally; Linux rpm tooling is required.
+
+## Preparing a version
+
+`make bump` increments the patch version in package.json and both app version entries in package-lock.json.
+Dependency versions and historical version examples are preserved. Use `make bump BUMP=minor`, `BUMP=major`,
+or `make bump VERSION=0.2.0` to choose the next version explicitly. Versions must be plain `MAJOR.MINOR.PATCH`
+and greater than the current version. Mismatched manifest/lock versions fail before anything is written.
+
+`make version` performs the same bump and prepends a dated section to `CHANGELOG.md`, listing commit subjects
+and short hashes since the highest earlier version tag reachable from HEAD. With no earlier version tag it
+lists the full history. The same `BUMP` and `VERSION` arguments apply. Run either `bump` or `version` for a
+release; running them one after the other bumps twice. Neither command creates a commit or tag.
+
+For example:
+
+```bash
+make version VERSION=0.2.0
+# Review CHANGELOG.md and the manifest changes, then commit them.
+git add package.json package-lock.json CHANGELOG.md
+git commit -m "Prepare release 0.2.0"
+git tag 0.2.0
+git push origin HEAD
+git push origin 0.2.0
+```
+
+CI checks out full Git history and uses the matching CHANGELOG.md section as the GitHub Release description.
+If a tag has no changelog section, the description is generated directly from the same Git commit range.
+The version/changelog helper tests use temporary repositories and run as part of `make check` (`test-release`).

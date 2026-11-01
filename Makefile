@@ -6,7 +6,7 @@ STAMP    := node_modules/.install-stamp
 ELECTRON := node_modules/electron/path.txt
 
 .DEFAULT_GOAL := help
-.PHONY: icons help install dev build run run-hidden typecheck test test-addon test-legacy lint check dist dist-appimage dist-deb clean distclean
+.PHONY: bump version test-release icons help install dev build run run-hidden typecheck test test-addon test-legacy lint check dist dist-appimage dist-deb clean distclean
 
 help: ## Show this list
 	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  \033[36m%-14s\033[0m %s\n",$$1,$$2}'
@@ -48,7 +48,7 @@ test-legacy: ## Run the old settings_env.py test
 
 lint: typecheck ## Alias for typecheck until a linter is added
 
-check: typecheck test test-addon ## Everything CI should run
+check: typecheck test test-addon test-release ## Everything CI should run
 
 dist: build $(ELECTRON) ## Package AppImage and deb into dist/
 	$(NODE_BIN)/electron-builder --linux
@@ -67,3 +67,13 @@ clean: ## Remove build output (out/, dist/)
 
 distclean: clean ## Also remove node_modules
 	rm -rf node_modules
+
+# VERSION=1.2.3 for an explicit version; otherwise BUMP=patch|minor|major (default patch).
+bump: ## Update the app version in package.json and package-lock.json
+	VERSION="$(VERSION)" BUMP="$(or $(BUMP),patch)" python3 scripts/version.py bump
+
+version: ## Bump the version and prepend commits since the previous version to CHANGELOG.md
+	VERSION="$(VERSION)" BUMP="$(or $(BUMP),patch)" python3 scripts/version.py version
+
+test-release: ## Test version bumps and changelog generation in temporary Git repositories
+	python3 scripts/test_version.py

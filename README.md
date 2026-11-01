@@ -63,3 +63,6 @@ Planned headroom improvements: diagnostics, quotas, detailed savings, CCR inspec
 GitHub Actions runs validation, tests and a build on every push and pull request. A pushed version tag such as
 `0.1.0` additionally builds Linux x64 deb/rpm packages and publishes them in a GitHub Release after checks pass.
 See [release instructions](docs/development.md#github-ci-and-releases).
+
+Use `make bump` to increment the app version, or `make version VERSION=0.2.0` to also prepare CHANGELOG.md.
+GitHub Release descriptions use that version’s changelog section.
