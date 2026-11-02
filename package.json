@@ -1,6 +1,6 @@
 {
   "name": "ai-desktop-proxy",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Tray app that routes AI coding clients through a local compression proxy",
   "main": "out/main/index.js",
   "license": "MIT",

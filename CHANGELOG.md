@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3 — 2026-11-02
+
+Changes since 0.2.2.
+
+- Add Caveman to Tools and warn about overlapping style plugins (#6) (c6f9ac8)
+
 ## 0.2.2 — 2026-11-02
 
 Changes since 0.2.1.
