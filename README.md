@@ -8,6 +8,7 @@
 [![Stars](https://img.shields.io/github/stars/redacid/ai-desktop-proxy)](https://github.com/redacid/ai-desktop-proxy/stargazers)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://redacid.github.io/ai-desktop-proxy/)
 ![Platform](https://img.shields.io/badge/platform-Linux%20x64-informational)
+[![License: MIT](https://img.shields.io/github/license/redacid/ai-desktop-proxy)](LICENSE)
 
 A Linux tray app (Electron) that routes AI coding clients through a local token-compression proxy.
 
@@ -110,3 +111,7 @@ GitHub Release descriptions use that version’s changelog section.
 
 Installed builds support app self-updates from GitHub Releases: checks every two hours, optional automatic
 background downloads, changelog display and explicit **Update and restart**. Development builds disable updating.
+
+## License
+
+[MIT](LICENSE) © 2026 Serhii Rudenko
