@@ -8,7 +8,7 @@
 // the squeeze; the tray plays it frame by frame while a service action runs.
 //
 // PNGs are rendered with Playwright's Chromium (not a project dependency: it is
-// resolved from the global install, see docs/development.md). Output is committed,
+// resolved from the global install, see docs-dev/development.md). Output is committed,
 // so building the app never needs a browser.
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'

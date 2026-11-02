@@ -22,7 +22,7 @@ Linux, Node.js 22+, npm, Python 3 (addon tests). `make` with no target lists eve
 
 ```
 src/shared/ipc.ts       IPC contract and every type crossing it
-src/main/               main process (see docs/architecture.md)
+src/main/               main process (see docs-dev/architecture.md)
 src/preload/            window.api over contextBridge
 src/renderer/           React UI (App.tsx, RecentRequests.tsx, messages.ts, styles.css)
 resources/              icons and the mitmproxy addon (shipped as extraResources)
@@ -32,7 +32,8 @@ resources/              icons and the mitmproxy addon (shipped as extraResources
 scripts/icons.mjs       icon generator
 examples/               sample headroom /stats-history and /transformations/feed responses used by tests
 legacy/                 original cdp.sh + settings_env.py, reference only
-docs/                   user guide, architecture, this file
+docs/                   user documentation, published to GitHub Pages
+docs-dev/               architecture, roadmap and this file; not published
 ```
 
 ## Tests
@@ -101,7 +102,7 @@ active one in settings, and passing its URL to the addon as `cdp_upstream`.
 
 - TypeScript strict, no unused locals; no shell strings: run commands with argument arrays (`proxy/exec.ts`).
 - Comments explain why, not what.
-- Every user-visible behaviour change updates `docs/` and the README status in the same commit.
+- Every user-visible behaviour change updates the user docs in `docs/` (and `docs-dev/` when internals change) and the README status in the same commit.
 
 ## Icons
 
@@ -193,9 +194,16 @@ never run real sudo/package managers or network calls. `make test-install` is in
 
 ## Documentation site and screenshots
 
-The same files in `docs/` are readable as GitHub Markdown and build into a searchable MkDocs site. `mkdocs.yml`
-provides navigation; `docs/index.md` is the homepage and `docs/interface.md` is the illustrated tab tour. Screenshots
-are committed in `docs/images/`, so a site build requires no running app or browser.
+Documentation has two audiences and two directories:
+
+- `docs/` is for people who use the app: installing, the interface, tools, settings, troubleshooting. It builds into
+  the MkDocs site on GitHub Pages and is also readable as GitHub Markdown. Keep it free of build commands, module
+  names and internals; link to the repository for those.
+- `docs-dev/` is for contributors: architecture and invariants, development, roadmap. It is plain Markdown in the
+  repository and is not published.
+
+`mkdocs.yml` provides navigation; `docs/index.md` is the homepage and `docs/interface.md` is the illustrated tab
+tour. Screenshots are committed in `docs/images/`, so a site build requires no running app or browser.
 
 ### Build and preview
 

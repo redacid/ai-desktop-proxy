@@ -28,7 +28,7 @@ export const fixture = {
       codeAware: false, kompress: true, semanticCache: true, rateLimit: true, rpm: null, tpm: null, budgetUsd: null,
       budgetPeriod: 'daily', http2: true, beacon: true, logMessages: false, extraArgs: '' }
   },
-  update: { currentVersion: '0.2.0', version: null, phase: 'idle', progress: 0, notes: '', error: null,
+  update: { currentVersion: '0.2.3', version: null, phase: 'idle', progress: 0, notes: '', error: null,
     checkedAt: Date.parse(checkedAt), autoCheck: true, autoDownload: true }
 }
 const tool = (id, name, extra = {}) => ({ id, name, installed: true, version: null, latest: null, updateAvailable: false,
@@ -48,5 +48,11 @@ fixture.tools = [
     stats: { source: 'Ponytail band ledger, 11 Claude Code sessions on this machine', facts: [
       { label: 'cost', value: '$90.51' }, { label: 'tokens', value: '159.6M' }, { label: 'turns', value: '73' }, { label: 'agent time', value: '3h 55m' }], daily: [] } }),
   tool('ponytail-codex', 'Ponytail · Codex', { version: '5.3.3', latest: '5.3.3', enabled: true, detail: 'Enabled. Restart the client after changes.' }),
-  tool('chisle-claude', 'Chisle · Claude Code', { installed: false, latest: '3.8.1', detail: 'Install the official Chisle plugin for this client.' })
+  tool('chisle-claude', 'Chisle · Claude Code', { installed: false, latest: '3.8.1', detail: 'Install the official Chisle plugin for this client.' }),
+  tool('caveman-claude', 'Caveman · Claude Code', { installed: false, latest: '4.0.1', detail: 'Install the official Caveman plugin for this client.' }),
+  tool('ccusage', 'ccusage', { version: '17.1.0', latest: '17.1.0', detail: 'Reads Claude Code and Codex logs on this machine.',
+    stats: { source: 'ccusage, Claude Code and Codex logs on this machine, last 14 days', facts: [
+      { label: 'cost, 14 days', value: '$184.20' }, { label: 'tokens, 14 days', value: '312M' }, { label: 'cache reads', value: '287M' },
+      { label: 'cost, 2026-11-01', value: '$14.75' }],
+      daily: [9, 12, 15, 11, 18, 14, 10, 16, 13, 17, 12, 15, 11, 14].map((v, i) => ({ day: `2026-10-${String(18 + i).padStart(2, '0')}`, value: v * 1e6 })) } })
 ]

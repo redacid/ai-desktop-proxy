@@ -5,16 +5,17 @@ repo_url: https://github.com/redacid/ai-desktop-proxy
 repo_name: redacid/ai-desktop-proxy
 edit_uri: edit/main/docs/
 strict: true
+exclude_docs: |
+  requirements.txt
 validation:
   links:
     anchors: warn
 nav:
   - Home: index.md
+  - Install and update: install.md
   - Interface tour: interface.md
   - User guide: user-guide.md
-  - Architecture: architecture.md
-  - Development: development.md
-  - Roadmap: plan.md
+  - Tools: tools.md
 theme:
   name: mkdocs
   color_mode: auto
@@ -22,5 +23,6 @@ theme:
 markdown_extensions:
   - tables
   - fenced_code
+  - admonition
   - toc:
       permalink: true

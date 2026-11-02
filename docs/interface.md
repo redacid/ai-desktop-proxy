@@ -50,14 +50,14 @@ Message logging is optional because it retains prompts, code and responses. Read
 | Dashboard (CBM Lens) | Starts/stops Codebase Memory's shared daemon with its web dashboard |
 | Stop / Start | Deactivates the tool, keeping its installation, where the client supports this |
 | Remove from system | Removes app-managed components after confirmation; foreign installations are preserved |
-| Version check | When the tool's release registry was last checked, not the last API request |
+| Version check | When the tool's new versions were last checked |
 
 Tool installations are checked every minute; new tool versions every **six hours**. App self-updates have a separate
 **two-hour** cadence. Commands are shown before an install, update or lifecycle action runs.
 
-Statistics have different meanings: headroom and RTK report their own savings; Ponytail's local ledger reports
-session consumption, not a measured saving against running without Ponytail. Chisle reports compressed tool output.
-See [Tools & updates](user-guide.md#tools-updates) for installation methods and limitations.
+Statistics have different meanings: headroom and RTK report their own savings; Ponytail reports what sessions
+used, not what it saved; Chisle reports compressed tool output; ccusage reports what you spent.
+See [Tools](tools.md) for what each tool does and what its buttons change.
 
 ## Settings: app updates and connection settings
 

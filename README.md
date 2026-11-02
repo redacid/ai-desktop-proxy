@@ -48,7 +48,7 @@ less install.sh
 bash install.sh
 ```
 
-See [installation details](docs/user-guide.md#installing-a-release) for prerequisites and file locations.
+See [Install and update](docs/install.md) for requirements, what the installer does and how to uninstall.
 
 ## Quick start (from source)
 
@@ -59,7 +59,7 @@ make install   # npm dependencies and the Electron binary
 make run       # build and start the app
 ```
 
-In the window: **Install mitmproxy** (or **Apply** if the old `cdp.sh` unit exists), make sure headroom answers
+In the window: **Install mitmproxy**, make sure headroom answers
 (**Install headroom** if it does not), then switch **Claude Code** or **Codex** on. Open a new session to use it;
 running sessions keep their old settings.
 
@@ -72,13 +72,22 @@ running sessions keep their old settings.
 The screenshots use demonstration data. The site is published from the released revision after a successful
 GitHub Release, once GitHub Pages is enabled in the repository settings.
 
+User documentation (`docs/`, published to the site):
+
 | Document | For |
 |---|---|
+| [docs/install.md](docs/install.md) | Requirements, installation, app updates, uninstalling |
 | [docs/interface.md](docs/interface.md) | Screenshots of every tab and what each control does |
-| [docs/user-guide.md](docs/user-guide.md) | Using the app: cards, actions, settings, troubleshooting |
-| [docs/architecture.md](docs/architecture.md) | How it works: processes, modules, files it writes, safety rules |
-| [docs/development.md](docs/development.md) | Building, testing, extending (new clients, compressors) |
-| [docs/plan.md](docs/plan.md) | Planned work and deferred headroom integration improvements |
+| [docs/user-guide.md](docs/user-guide.md) | Using the app: cards, actions, settings, files, troubleshooting |
+| [docs/tools.md](docs/tools.md) | The optional tools and what their buttons change |
+
+Developer documentation (`docs-dev/`, not published):
+
+| Document | For |
+|---|---|
+| [docs-dev/architecture.md](docs-dev/architecture.md) | How it works: processes, modules, files it writes, safety rules |
+| [docs-dev/development.md](docs-dev/development.md) | Building, testing, extending, releases, documentation site |
+| [docs-dev/roadmap.md](docs-dev/roadmap.md) | Planned work and deferred headroom integration improvements |
 | [AGENTS.md](AGENTS.md) | Instructions for coding agents working in this repository |
 | [legacy/README.md](legacy/README.md) | The original shell version (`cdp.sh`), kept for reference |
 
@@ -87,13 +96,13 @@ GitHub Release, once GitHub Pages is enabled in the repository settings.
 Done: Claude Code and Codex clients, mitmproxy service with headroom fallback, headroom service with its options in Settings,
 statistics with expandable recent requests, approved tool installation/update checks and RTK client connections, settings,
 start at login. Illustrated documentation builds into GitHub Pages on release. GitHub CI validates every push; version tags publish deb/rpm releases. Not yet: package installation smoke tests, Cursor client, macOS.
-Planned headroom improvements: diagnostics, quotas, detailed savings, CCR inspection and tuning; see [the project plan](docs/plan.md).
+Planned headroom improvements: diagnostics, quotas, detailed savings, CCR inspection and tuning; see [the roadmap](docs-dev/roadmap.md).
 
 ## CI and releases
 
 GitHub Actions runs validation, tests and a build on every push and pull request. A pushed version tag such as
 `0.1.0` additionally builds Linux x64 deb/rpm packages and publishes them in a GitHub Release after checks pass.
-See [release instructions](docs/development.md#github-ci-and-releases).
+See [release instructions](docs-dev/development.md#github-ci-and-releases).
 
 Use `make bump` to increment the app version, or `make version VERSION=0.2.0` to also prepare CHANGELOG.md.
 GitHub Release descriptions use that version’s changelog section.

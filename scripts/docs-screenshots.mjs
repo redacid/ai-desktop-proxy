@@ -42,7 +42,7 @@ try {
     }
   }, fixture)
   await page.goto('http://docs.example/')
-  await page.getByRole('heading', { name: 'AI Desktop Proxy', exact: true }).waitFor()
+  await page.getByRole('heading', { name: /^AI Desktop Proxy/, level: 1 }).waitFor()
   const output = join(root, 'docs/images')
   await mkdir(output, { recursive: true })
   for (const name of ['Overview', 'Savings', 'Tools', 'Settings']) {

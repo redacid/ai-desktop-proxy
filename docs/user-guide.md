@@ -1,56 +1,13 @@
 # User guide
 
-New to the app? Follow the [illustrated interface tour](interface.md) for screenshots and explanations of every tab.
-
-## Installing a release
-
-Run this as your desktop user (not root, and do not pipe into `sudo bash`):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/main/install.sh | bash
-```
-
-Supported: Linux x86_64 desktops with systemd and apt-get (Debian/Ubuntu), dnf (Fedora/RHEL), or zypper
-(openSUSE), Internet access, sudo privileges, and curl to fetch the installer. ARM releases are not built yet.
-If curl is missing, install it using your distribution's package manager first.
-
-The installer:
-
-- Installs system prerequisites (CA certificates, Python 3, Git, iproute and archive tools).
-- Finds the latest stable public GitHub Release, downloads its deb/rpm and verifies SHA-256 using `SHA256SUMS` (or the GitHub API asset digest for older releases).
-  Missing assets/checksum data or a checksum mismatch stop installation. The checksums detect a damaged download; packages
-  are not code-signed. Older releases work when GitHub provides their SHA-256 asset digest.
-- Keeps Node.js 20.18.1+ with npm/npx when available. Otherwise installs the official Node.js 22 distribution
-  under `/opt/ai-desktop-proxy-node/` with links in `/usr/local/bin`, after checking its SHA-256 checksum.
-  It refuses to overwrite unrelated files already in those link locations.
-- Installs missing uv/uvx with Astral's official installer into `~/.local/bin` without changing shell profiles.
-- Installs missing mitmproxy and `headroom-ai[all]` with `uv tool install --python 3.13`; uv can download Python
-  3.13 if needed. Headroom and its models/dependencies can require a substantial download.
-- Uses the native package manager to install the app and resolve its GUI/runtime dependencies.
-
-Open AI Desktop Proxy from the applications menu (restart an already running copy). In Overview, set up/start the
-Proxy and Compressor services, then turn on client routing. Optional tools, client CLIs and their account logins
-are configured separately. Installation does not enable services or change Claude/Codex routing. Settings, indexes
-and existing working tools are kept. Installed builds can subsequently update from inside the app.
-
-For download-and-review installation:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/redacid/ai-desktop-proxy/main/install.sh -o install.sh
-less install.sh
-bash install.sh
-```
+How to use the app day to day. To install it, see [Install and update](install.md); for screenshots of every
+tab, see the [interface tour](interface.md); optional tools are described in [Tools](tools.md).
 
 ## Starting the app
 
-```bash
-make run          # window opens
-make run-hidden   # starts straight into the tray
-```
-
-Closing the window hides it to the tray; **Quit** in the tray menu exits. Only one copy runs at a time: starting
-it again brings the existing window forward. After `git pull`, quit the running copy first, or you will keep
-seeing the old build.
+Open **AI Desktop Proxy** from the applications menu, or turn on **Start at login** in Settings. Closing the window
+hides it to the tray; **Quit** in the tray menu exits the app. The proxy and headroom services keep running after you
+quit. Only one copy runs at a time: starting it again brings the existing window forward.
 
 On GNOME the tray icon needs the AppIndicator extension.
 
@@ -62,7 +19,7 @@ The window has four tabs:
 |---|---|
 | Overview | Proxy, Compressor and Clients cards; its dot repeats the overall state |
 | Savings | headroom savings and recent requests |
-| Tools | Tools & updates: headroom, RTK, Ponytail, Chisle, Serena, MarkItDown, Context7, Codebase Memory |
+| Tools | Optional tools and their updates, see [Tools](tools.md) |
 | Settings | App and headroom settings |
 
 Errors and the Install log stay visible on every tab, and a running tool action keeps going when you switch tabs.
@@ -89,7 +46,7 @@ check.
 |---|---|---|
 | Install mitmproxy | mitmproxy is not installed | Asks, runs `uv tool install mitmproxy`, then sets up and starts the service |
 | Set up & start | installed, no service | Writes `ai-desktop-proxy.service` and starts it |
-| Apply | the service was written by `cdp.sh` or by an older app version, or settings changed | Rewrites and restarts the service |
+| Apply | the service was written by an older app version, or settings changed | Rewrites and restarts the service |
 | Restart / Stop / Start | service exists | systemd actions. Stop first removes proxy settings from routed clients |
 | Remove | service exists | Removes client settings, then stops and deletes the service. mitmproxy stays installed |
 | Logs | service exists | The last 80 journal lines |
@@ -140,140 +97,7 @@ Codex on only while it can see its own proxy service holding that port. If the s
 port, the app removes the line at its next status check (every 5 s with the window open, 30 s in the tray), and
 puts it back once the service holds the port again. A proxy restart therefore takes Codex off for a moment.
 
-### Tools & updates
-
-This section checks headroom, RTK, the Ponytail and Chisle plugins, and the Serena and MarkItDown MCP servers, per client
-where it applies (Claude Code, Codex).
-Installation presence is checked at startup and every minute while the app runs. New stable versions are
-checked at startup when the cached result is older than six hours, then every six hours. **Check for updates**
-forces a fresh check. The cadence survives app restarts. A failed check shows an error and keeps the last
-known version; a detection error is **unknown**, never treated as proof that a tool is missing.
-
-**Install** appears for missing tools; **Update to …** appears when a newer stable version is known.
-Nothing installs or updates automatically. Each action first opens a confirmation with the commands or
-download URLs and file changes. Cancel makes no installation or configuration changes. Progress and errors
-appear in the Install log. Missing optional tools do not turn the proxy's health red.
-
-- **headroom:** requires `uv`. Installs a specific checked release with
-  `uv tool install --upgrade --python 3.13 "headroom-ai[all]==<version>"`. An active app-managed service
-  restarts afterward; a stopped service stays stopped. For a new installation, use **Set up & start** on
-  the Compressor card afterward. Externally managed headroom and remote URLs are left alone. The original
-  Compressor-card **Install headroom** action still installs and starts the service together.
-- **RTK:** downloads the official Linux x64 or arm64 release archive and `checksums.txt`, verifies SHA-256,
-  and installs a staged, version-checked binary in the app's `userData/tools/rtk`. It creates
-  `~/.local/bin/rtk` as a symlink to that binary. It never replaces a foreign file or symlink at that path;
-  update such an installation with its owner/package manager, or move it yourself first. No root access
-  is needed. Coding clients must have `~/.local/bin` on PATH before other RTK installations; restart clients
-  after installation. **Connect to Claude Code / Codex** previews the native `rtk init` changes, then asks
-  before registering global hooks and instructions. Custom project filters are not automatically trusted.
-  Reconnection is explicit; stopping the API proxy does not remove RTK hooks. The card lists Claude Code and
-  Codex with a switch each, like the Clients card. Their state comes from `rtk init -g --show` (and
-  `--codex --show`): **connected** only when every global item is in place, so a partial setup reads as not
-  connected and switching on repairs it. Switching off previews and runs `rtk init -g [--codex] --uninstall`,
-  which removes RTK's hooks, `RTK.md` and the `@RTK.md` reference; RTK itself stays installed.
-- **Ponytail:** requires the corresponding client CLI with plugin support. Uses the official
-  `DietrichGebert/ponytail` marketplace and the client's native install/update commands. Only the Ponytail
-  marketplace is refreshed, not every marketplace or plugin. A different marketplace already named
-  `ponytail` is a conflict, not overwritten. Installation and updates may run plugin lifecycle code, as with
-  installation directly in the client. Restart client sessions after changes. In Codex, review and trust
-  Ponytail hooks through `/hooks`; this app does not approve hook trust. An installed but disabled plugin
-  is reported as disabled; enable it in the client. Ponytail modes remain controlled by `/ponytail` in the
-  client; the app does not rewrite project `AGENTS.md` with Ponytail instructions. Ponytail has one card with a
-  switch per client: on installs it, off uninstalls it with the client's own command
-  (`claude plugin uninstall ponytail@ponytail --scope user`, `codex plugin remove ponytail@ponytail`).
-
-- **Chisle:** a Claude Code plugin handled like Ponytail, from the official `JayPokale/Chisle` marketplace
-  (`chisle@chisle`), with the same card and per-client switch. Chisle has no Codex plugin (its Codex setup is an
-  `npx chisle` run that edits `~/.codex/AGENTS.md`), so the app offers it for Claude Code only. Chisle and
-  Ponytail both set a terse "lazy senior developer" style; running both doubles those instructions.
-- **Caveman:** the official Claude Code plugin `caveman@caveman` from the `JuliusBrussee/caveman` marketplace,
-  handled like Chisle (Claude Code only). Caveman's full installer (`npx @caveman-ai/cli`) also starts its own API
-  proxy on `127.0.0.1:8787` and points Claude Code at it, which conflicts with this app's proxy and headroom, so the
-  app installs only the plugin. If a Caveman skill from that installer is already in `~/.claude/skills/caveman`,
-  the card says so: the plugin would add a second copy.
-- **Ponytail, Chisle and Caveman together:** all three set a terse "say less" style. When more than one is active in
-  Claude Code, each of their cards shows a warning, and installing one while another is active adds a warning to
-  the confirmation. Keep one and stop the others.
-- **Serena, MarkItDown:** MCP servers, so there is nothing to install besides `uv`. A switch per client
-  registers the server at user scope with the client's own command, run by uvx from a pinned PyPI release:
-  `claude mcp add --scope user serena -- uvx --python 3.13 --from serena-agent==<version> serena start-mcp-server
-  --context claude-code --project-from-cwd` (`--context codex` for Codex), and `markitdown-mcp==<version>
-  markitdown-mcp` for MarkItDown. Switching off runs `claude mcp remove --scope user <name>` or
-  `codex mcp remove <name>`. **Update** re-registers the new pin in every client the app connected. A server
-  with the same name that the app did not add (another command, or no pin) shows **set up elsewhere** and is
-  never changed. State is read from `~/.claude.json` (`mcpServers`) and `$CODEX_HOME/config.toml`
-  (`mcp_servers`). uvx downloads the release on the client's next start.
-
-**Open dashboard ↗** appears on a card while the tool's own web dashboard answers on this machine: headroom at
-`<headroom URL>/dashboard`, Serena at `http://127.0.0.1:24282/dashboard/` (each running Serena takes the next port,
-so there can be several links), and Codebase Memory's CBM Lens at `http://127.0.0.1:9749/` when its daemon runs
-with the UI. The app checks these addresses with the presence check. Only CBM Lens can be started from the app:
-the Codebase Memory card has a **Dashboard (CBM Lens)** switch that runs `npx -y codebase-memory-mcp@<version>
-daemon start --port=9749` (off: `daemon stop`) with the same pinned build the clients use, after a confirmation.
-The daemon keeps running when the app quits, and client sessions share it while it runs. RTK's dashboard (`rtk gain --watch`) is terminal-only, and the other
-tools have none.
-
-Hovering a card shows what the tool is for; **↗** next to its name opens the project's official page in the
-browser. The headroom card shows the service state and its lifetime savings with a 14-day chart; the Savings tab
-has the full detail.
-
-**Stop / Start / Remove from system.** RTK, Serena, MarkItDown, Ponytail and Chisle cards end with machine-wide
-buttons; each opens a confirmation that lists its commands, and the app checks the result afterwards.
-
-| Tool | Stop (keeps it installed) | Remove from system |
-|---|---|---|
-| RTK | `rtk init -g [--codex] --uninstall` for every connected client | Stop, then delete the app-managed binary and its `~/.local/bin/rtk` symlink. An RTK installed elsewhere is refused. Savings history stays |
-| Serena, MarkItDown | Remove the app's registration from every client | Stop, then `uv cache clean <package>` |
-| Ponytail, Chisle | `claude plugin disable … --scope user`; **Start** enables it again. Codex has no plugin disable, so there only its switch (uninstall) applies | Uninstall from every client, then remove the official marketplace (`plugin marketplace remove`); a marketplace of that name from another source stays |
-
-Registrations or marketplaces set up outside the app are never touched.
-
-- **Context7:** an MCP server that fetches current library documentation. The app runs it locally with npx from a
-  pinned npm release (`claude mcp add --scope user context7 -- npx -y @upstash/context7-mcp@<version>`, the same
-  with `codex mcp add`), so it needs Node.js 20.18+; it still queries context7.com for the documentation itself.
-  **Update** re-pins the clients the app connected. If Claude Code already has the official `context7` plugin (a
-  remote server), its row shows **set up elsewhere**. **Stop** removes the app's registrations; there is nothing
-  else to remove.
-
-- **Codebase Memory:** [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) indexes the code into
-  a local knowledge graph the agent queries instead of re-reading files. Handled like Context7: run by npx from a
-  pinned npm release (`npx -y codebase-memory-mcp@<version>`; the package downloads and verifies the release binary
-  on first start), a switch per client, **Update** re-pins. Its own `codebase-memory@codebase-memory` Claude Code
-  plugin counts as set up elsewhere. Indexes stay in `~/.cache/codebase-memory-mcp`; the app never deletes them,
-  so the card has **Stop** but no **Remove from system**. The project's full installer (`codebase-memory-mcp install`,
-  with skills and hooks) is not used.
-
-- **ccusage:** [ccusage](https://github.com/ryoppippi/ccusage) reads Claude Code and Codex logs (`~/.claude`,
-  `~/.codex`) and reports real token use and cost. It changes no client, so the card has **Enable** / **Disable**
-  instead of switches. **Enable** pins the latest npm release (`npx -y ccusage@<version> --version` downloads it
-  after a confirmation) and saves the pin in `ccusage.json` in the app's config dir; from then on the app runs
-  `npx -y ccusage@<version> daily --json --since <14 days ago>` in the background, at most every 10 minutes,
-  because each run re-reads every log for a few seconds of CPU. The card shows cost and tokens for the last 14
-  days, cache reads, today's cost and tokens per day. These are what you spent, not what the other tools saved;
-  compare days before and after turning a tool on. **Disable** stops the runs and forgets the pin.
-
-Each card also shows what the tool achieved, refreshed with the presence check:
-
-- **RTK:** tokens saved, average saving and commands filtered, plus tokens saved per day for the last 14 days,
-  from `rtk gain --daily --format json`. These are RTK's own local records on this machine.
-- **Ponytail:** totals from Ponytail's own band ledger (`$XDG_CONFIG_HOME/ponytail/band/*.csv`, default
-  `~/.config/ponytail/band`): cost, tokens, turns and agent time over every Claude Code session it recorded,
-  the same figures as its band in Claude Code. They show what the sessions used, not what Ponytail saved.
-  Until the ledger has a session, the card shows the published benchmark from the installed plugin's
-  `ponytail-gain` skill instead (less lines of code, output tokens, cost, time), labelled as such.
-
-- **Chisle:** characters its compress-output hook elided from tool output, an estimate of tokens (characters ÷ 4),
-  and how many outputs it compressed, from `~/.claude/.chisle-compress-stats.json`.
-- **Serena, MarkItDown:** none; Serena keeps its tool-usage statistics only in a running server's dashboard.
-
-Version sources are PyPI (`headroom-ai`, `serena-agent`, `markitdown-mcp`), npm (`@upstash/context7-mcp`, `codebase-memory-mcp`, `ccusage`), GitHub
-Releases (`rtk-ai/rtk`), and
-the official Ponytail and Chisle plugin manifests. GitHub rate limits, an offline machine, or unsupported client CLI output can prevent a check;
-the error is shown without attempting an installation. After a partial native-command failure, review
-the log: earlier steps may already have completed. Tool versions and installation paths are distinct
-from a running headroom process's version until that process is restarted.
-
-### headroom savings
+### Savings
 
 Lifetime totals (tokens saved, money saved by compression and by cache, requests), the current headroom session,
 and tokens saved per day for the last 14 days, from headroom's `/stats-history`.
@@ -355,6 +179,7 @@ options do not reach that headroom.
 | `~/.codex/config.toml.bak-ai-desktop-proxy` | One-time backup made before the first change |
 | `~/.config/ai-desktop-proxy/state.json` | App settings and what was written into each client |
 | `~/.config/ai-desktop-proxy/ccusage.json` | The ccusage release you enabled (only while ccusage is enabled) |
+| `~/.config/ai-desktop-proxy/updates.json` | App update preferences |
 | `~/.config/ai-desktop-proxy/tool-updates.json` | Latest known tool versions and update-check attempt times |
 | `~/.config/ai-desktop-proxy/tools/rtk` | App-managed RTK binary; a temporary `rtk.staging` file is used for verification |
 | `~/.local/bin/rtk` | Symlink to the app-managed RTK, created only when absent |
@@ -364,11 +189,10 @@ options do not reach that headroom.
 | `~/.config/autostart/ai-desktop-proxy.desktop` | Start at login (only if enabled) |
 | `~/.mitmproxy/` | mitmproxy's CA; trusted only by clients the app routes, never by the system |
 
-Approved RTK connection commands additionally manage the client's global hooks and instruction files
-(`settings.json`, `CLAUDE.md`, `RTK.md`, RTK hook/filter files for Claude; `$CODEX_HOME/hooks.json`,
-`AGENTS.md`, `RTK.md` for Codex). Their native dry-run lists the changes before approval. Approved Ponytail
-commands manage the client's marketplace registry, plugin cache and enablement through its own CLI.
-These client-managed artifacts are not removed by **Remove** on either proxy service card.
+Tools you connect on the Tools tab change the client through the tool's or the client's own commands, which the
+confirmation lists: RTK adds hooks and `RTK.md` instructions, plugins go into the client's plugin registry, and MCP
+servers into `~/.claude.json` or `~/.codex/config.toml`. **Remove** on the Proxy or Compressor card does not undo
+those; use the switches and buttons on the [Tools](tools.md) tab.
 
 ## Troubleshooting
 
@@ -381,11 +205,8 @@ with `ai-desktop-proxy*.service`. The old `~/.config/claude-desktop-proxy` direc
 port, typically a `mitmdump` started by hand. The card names it ("held by mitmdump (pid …)"); **Restart** or
 **Apply** offers to stop it. By hand: `ss -ltnp 'sport = :8877'`, then `kill <pid>`.
 
-**`make run` fails with "Electron uninstall".** npm skipped Electron's post-install step (`ignore-scripts`).
-`make install` downloads the binary; by hand: `node node_modules/electron/install.js`.
-
-**I still see the old window after an update.** The previous copy is still in the tray: **Quit** it, then
-`make run`.
+**I still see the old window after an update.** The previous copy is still in the tray: **Quit** it there, then
+open the app again.
 
 **Remote/cloud Claude sessions are not compressed.** They run on Anthropic's machines, not yours, so their
 traffic never reaches your proxy. Use Remote Control or local sessions for work that should be compressed.
@@ -393,27 +214,5 @@ traffic never reaches your proxy. Use Remote Control or local sessions for work 
 **Codex says "conflict" right after `headroom wrap codex`.** headroom's own wrapper writes `model_provider` and
 `openai_base_url` into the same file. Run `headroom unwrap codex`, then switch Codex on here.
 
-**Undo everything.** Switch clients off, **Remove** both services, then optionally
-`uv tool uninstall mitmproxy` and `uv tool uninstall headroom-ai`.
+**Undo everything.** See [Uninstalling](install.md#uninstalling).
 
-## Downloading release packages
-
-GitHub Releases publishes Linux x64 `.deb` and `.rpm` installers for version tags such as `0.1.0`.
-Download the package for your distribution from the corresponding release. Packages are built only after
-CI validation succeeds; CI checks package metadata, but does not test installation on every distribution.
-
-## App self-updates
-
-Installed deb/rpm packages (and AppImage builds) check GitHub Releases for a newer stable version on first launch,
-then every **2 hours** while the app runs. The last check is saved, so restarting the app does not reset the cadence.
-Development (`make run`) and unpacked builds show that updating is unavailable.
-
-**Settings → App updates** shows the current version, last check and switches for automatic checking and downloading
-(both on by default). **Check for updates** and **Download update** can be used manually. A notice on other tabs
-shows the new version, release notes and download progress; **Later** hides the notice for this run.
-
-Updates are downloaded and checksum-checked by electron-updater. Installation happens only after **Update and
-restart**; quitting normally does not install it. The app refuses installation while a service/tool operation is
-running; retry when that operation finishes. Installing deb/rpm can prompt for administrator authentication via the
-system installer. Proxy and headroom services keep running across the app restart. Preferences are stored in
-`~/.config/ai-desktop-proxy/updates.json`. The first release that includes this feature must be installed manually.
