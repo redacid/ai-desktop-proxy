@@ -336,6 +336,7 @@ export function App(): React.JSX.Element {
         <div>
           <h1>
             <span className={`dot ${status.overall}`} /> AI Desktop Proxy
+            {appUpdate && <span className="badge version" title="Installed version">v{appUpdate.currentVersion}</span>}
           </h1>
           <p className="subtitle">{SUMMARY[status.overall]}</p>
         </div>
@@ -418,7 +419,7 @@ export function App(): React.JSX.Element {
             <p className="detail">headroom is not answering at the configured URL. Start it on the Overview tab, then send a few requests through the proxy.</p>
           </section>)}
       <footer>
-        Last check: {status.checkedAt ? new Date(status.checkedAt).toLocaleTimeString() : 'never'}
+        {appUpdate && <>AI Desktop Proxy v{appUpdate.currentVersion} · </>}Last check: {status.checkedAt ? new Date(status.checkedAt).toLocaleTimeString() : 'never'}
       </footer>
     </main>
   )

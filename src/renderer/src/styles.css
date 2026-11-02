@@ -203,3 +203,4 @@ button.danger { color: var(--down); border-color: color-mix(in srgb, var(--down)
 .update-option { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
 .release-notes { white-space: pre-wrap; font: inherit; max-height: 240px; overflow: auto; }
 .app-updates progress { width: 100%; accent-color: var(--accent); }
+.badge.version { font-size: 11px; font-weight: normal; align-self: center; }

@@ -67,7 +67,8 @@ The window has four tabs:
 
 Errors and the Install log stay visible on every tab, and a running tool action keeps going when you switch tabs.
 
-The dot next to the title and the tray icon colour show the overall state:
+The installed version is shown next to the title, in the footer, at the top of the tray menu and in the tray
+tooltip. The dot next to the title and the tray icon colour show the overall state:
 
 | Colour | Meaning |
 |---|---|
