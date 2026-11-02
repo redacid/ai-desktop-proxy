@@ -58,12 +58,16 @@ Restarting the app does not reset that timer.
 
 **Settings → App updates** shows the current version, the last check and two switches: check automatically and
 download automatically (both on by default). **Check for updates** and **Download update** do the same by hand.
-When an update is ready, a notice shows the new version and its release notes; **Later** hides it until the next
-start.
+When an update is downloaded you see it in several places: a desktop notification (once per version), an
+**Update to v… and restart** item at the top of the tray menu, a badge next to the app title that opens Settings,
+and a notice above every tab with the release notes. **Later** hides the notice until the next start; the badge and
+the tray item stay.
 
 Nothing is installed until you press **Update and restart**. Quitting the app does not install a downloaded update.
-The app refuses to update while a service or tool action is running; retry when it finishes. Your system may ask for
-your password to install the package. The proxy and headroom services keep running while the app restarts.
+The app refuses to update while a service or tool action is running; retry when it finishes. Your system asks for
+your password to install the package. If you cancel that dialog or authentication fails, the downloaded update stays
+ready: press **Update and restart** again, or install the package by hand with the command the error message shows.
+The proxy and headroom services keep running while the app restarts.
 
 ## Uninstalling
 

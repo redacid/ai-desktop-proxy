@@ -12,6 +12,31 @@ export interface UpdateBackend extends EventEmitter {
   checkForUpdates(): Promise<unknown>
   downloadUpdate(): Promise<unknown>
   quitAndInstall(silent?: boolean, restart?: boolean): void
+  /** Set by electron-updater once the package is downloaded. */
+  readonly installerPath?: string | null
+}
+
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+
+/** GitHub sends release notes as HTML; the window shows them as text, never as markup. */
+export function notesText(notes: string): string {
+  return notes
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<br\s*\/?>|<\/(p|li|ul|ol|h[1-6]|div)>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) =>
+      e[0] === '#' ? String.fromCodePoint(parseInt(e.slice(e[1].toLowerCase() === 'x' ? 2 : 1), e[1].toLowerCase() === 'x' ? 16 : 10)) : ENTITIES[e.toLowerCase()] ?? m)
+    .split('\n').map((l) => l.trim()).filter(Boolean).join('\n')
+}
+
+/** What to show when the package manager step of an install fails. */
+export function installError(message: string, installerPath?: string | null): string {
+  const manual = installerPath ? ` To install it by hand: sudo apt install ${installerPath} (deb) or sudo dnf install ${installerPath} (rpm).` : ''
+  // pkexec exits with 126/127 when the password dialog is cancelled, fails or cannot be shown.
+  if (/pkexec exited with code 12[67]/.test(message)) {
+    return `The update was not installed: administrator authentication was cancelled or failed. Press Update and restart to try again.${manual}`
+  }
+  return `The update was not installed: ${message}.${manual}`
 }
 
 /** Only the app updates here; proxy/headroom services outlive its restart. */
@@ -30,9 +55,13 @@ export class AppUpdates extends EventEmitter {
     backend.autoInstallOnAppQuit = false
     backend.allowPrerelease = false
     backend.allowDowngrade = false
-    backend.on('error', (err: Error) => this.patch({ phase: 'error', error: err.message }))
+    backend.on('error', (err: Error) => {
+      // A failed install leaves the downloaded package in place, so offer the install again.
+      if (this.state.phase === 'installing') this.patch({ phase: 'ready', error: installError(err.message, backend.installerPath) })
+      else this.patch({ phase: 'error', error: err.message })
+    })
     backend.on('update-available', (info: { version: string; releaseNotes?: string | { note: string | null }[] | null }) => {
-      const notes = typeof info.releaseNotes === 'string' ? info.releaseNotes : (info.releaseNotes ?? []).map((n) => n.note ?? '').join('\n')
+      const notes = notesText(typeof info.releaseNotes === 'string' ? info.releaseNotes : (info.releaseNotes ?? []).map((n) => n.note ?? '').join('\n'))
       this.patch({ phase: 'available', version: info.version, notes, progress: 0 })
     })
     backend.on('update-not-available', () => this.patch({ phase: 'idle', version: null, notes: '' }))
@@ -102,7 +131,7 @@ export class AppUpdates extends EventEmitter {
     if (!this.backend || this.state.phase !== 'ready') throw new Error('Download the update first.')
     this.patch({ phase: 'installing', error: null })
     try { this.backend.quitAndInstall(false, true) }
-    catch (err) { this.patch({ phase: 'error', error: (err as Error).message }) }
+    catch (err) { this.patch({ phase: 'ready', error: installError((err as Error).message, this.backend.installerPath) }) }
     return this.current
   }
 }

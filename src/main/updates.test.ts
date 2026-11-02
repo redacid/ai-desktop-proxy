@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AppUpdates, UPDATE_INTERVAL_MS, type UpdateBackend } from './updates'
+import { AppUpdates, UPDATE_INTERVAL_MS, installError, notesText, type UpdateBackend } from './updates'
 
 class Backend extends EventEmitter implements UpdateBackend {
   autoDownload = true
@@ -105,5 +105,23 @@ describe('app self updates', () => {
     await updates.check(); await updates.download()
     expect(backend.checkForUpdates).toHaveBeenCalledOnce()
     finish(); await pending
+  })
+
+  it('shows GitHub release notes as text', () => {
+    const html = '<p>Changes since 0.2.3.</p>\n<ul>\n<li>Docs &amp; split (<a class="issue-link" href="https://github.com/x/y/pull/7">#7</a>) (<a href="#"><tt>4603e5b</tt></a>)</li>\n</ul>'
+    expect(notesText(html)).toBe('Changes since 0.2.3.\n• Docs & split (#7) (4603e5b)')
+    expect(notesText('- plain markdown\n- stays')).toBe('- plain markdown\n- stays')
+  })
+
+  it('keeps a downloaded update installable after the installer fails', async () => {
+    const backend = new Backend()
+    Object.assign(backend, { installerPath: '/cache/app_0.3.0_amd64.deb' })
+    backend.quitAndInstall.mockImplementation(() => { backend.emit('error', new Error('Command pkexec exited with code 127')) })
+    const updates = new AppUpdates(backend, '0.2.0', join(dir, 'updates.json'), () => false)
+    await updates.start(); updates.stop()
+    updates.install()
+    expect(updates.current.phase).toBe('ready')
+    expect(updates.current.error).toMatch(/authentication was cancelled or failed.*sudo apt install \/cache\/app_0.3.0_amd64.deb/)
+    expect(installError('disk full')).toBe('The update was not installed: disk full.')
   })
 })
