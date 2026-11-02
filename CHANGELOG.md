@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2 — 2026-11-02
+
+Changes since 0.2.1.
+
+- Show the installed app version (#5) (a6a5d1d)
+- Add ccusage to Tools for real token use and cost (#4) (a1bc3cb)
+
 ## 0.2.1 — 2026-11-01
 
 Changes since 0.2.0.
