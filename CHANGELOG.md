@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4 — 2026-11-02
+
+Changes since 0.2.3.
+
+- Docs/split user dev (#7) (4603e5b)
+
 ## 0.2.3 — 2026-11-02
 
 Changes since 0.2.2.
