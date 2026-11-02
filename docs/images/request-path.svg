@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 400" width="1000" height="400" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">Request path</title>
+  <desc id="d">Claude Code reaches mitmdump on 127.0.0.1:8877 through HTTPS_PROXY; Codex reaches its reverse listener on 127.0.0.1:8878 through openai_base_url. API requests go through headroom on 127.0.0.1:6767 to api.anthropic.com, api.openai.com or chatgpt.com. When headroom is down, mitmdump sends them straight to the provider. Other hosts pass through a CONNECT tunnel without decryption.</desc>
+  <style>
+    .bg { fill: #ffffff }
+    .box { fill: #f4f6f8; stroke: #8c959f; stroke-width: 1.5 }
+    .svc { fill: none; stroke: #8c959f; stroke-width: 1.5; stroke-dasharray: 6 4 }
+    .hr { fill: #e8f5ec; stroke: #2da44e; stroke-width: 1.5 }
+    .ext { fill: #eef4fb; stroke: #4c8ed9; stroke-width: 1.5 }
+    .t { fill: #1f2328; font-size: 15px; font-weight: 600 }
+    .s { fill: #57606a; font-size: 12.5px }
+    .m { font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace }
+    .main { stroke: #2da44e; stroke-width: 2; fill: none }
+    .fall { stroke: #bf8700; stroke-width: 1.8; fill: none; stroke-dasharray: 7 5 }
+    .tun { stroke: #8c959f; stroke-width: 1.8; fill: none }
+    .ah-main { fill: #2da44e } .ah-fall { fill: #bf8700 } .ah-tun { fill: #8c959f }
+    .lm { fill: #1a7f37; font-size: 12px } .lf { fill: #9a6700; font-size: 12px } .lt { fill: #57606a; font-size: 12px }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0d1117 }
+      .box { fill: #161b22; stroke: #6e7681 }
+      .svc { stroke: #6e7681 }
+      .hr { fill: #12261b; stroke: #3fb950 }
+      .ext { fill: #111d2e; stroke: #58a6ff }
+      .t { fill: #e6edf3 } .s { fill: #9198a1 }
+      .main { stroke: #3fb950 } .ah-main { fill: #3fb950 } .lm { fill: #3fb950 }
+      .fall { stroke: #d29922 } .ah-fall { fill: #d29922 } .lf { fill: #d29922 }
+      .tun { stroke: #6e7681 } .ah-tun { fill: #6e7681 } .lt { fill: #9198a1 }
+    }
+  </style>
+  <defs>
+    <marker id="am" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ah-main" d="M0 0L10 5L0 10z"/></marker>
+    <marker id="af" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ah-fall" d="M0 0L10 5L0 10z"/></marker>
+    <marker id="at" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ah-tun" d="M0 0L10 5L0 10z"/></marker>
+  </defs>
+  <rect class="bg" width="1000" height="400" rx="10"/>
+
+  <!-- clients -->
+  <rect class="box" x="20" y="92" width="130" height="56" rx="8"/>
+  <text class="t" x="85" y="125" text-anchor="middle">Claude Code</text>
+  <rect class="box" x="20" y="282" width="130" height="56" rx="8"/>
+  <text class="t" x="85" y="315" text-anchor="middle">Codex</text>
+
+  <!-- mitmdump service -->
+  <rect class="svc" x="270" y="40" width="210" height="330" rx="10"/>
+  <text class="t" x="375" y="64" text-anchor="middle">mitmdump</text>
+  <text class="s" x="375" y="360" text-anchor="middle">one systemd user service</text>
+  <rect class="box" x="286" y="86" width="178" height="68" rx="8"/>
+  <text class="t m" x="375" y="113" text-anchor="middle" font-size="14">127.0.0.1:8877</text>
+  <text class="s" x="375" y="134" text-anchor="middle">HTTPS proxy</text>
+  <rect class="box" x="286" y="276" width="178" height="68" rx="8"/>
+  <text class="t m" x="375" y="303" text-anchor="middle" font-size="14">127.0.0.1:8878</text>
+  <text class="s" x="375" y="324" text-anchor="middle">reverse proxy</text>
+
+  <!-- headroom -->
+  <rect class="hr" x="570" y="174" width="150" height="82" rx="8"/>
+  <text class="t" x="645" y="205" text-anchor="middle">headroom</text>
+  <text class="s m" x="645" y="225" text-anchor="middle">127.0.0.1:6767</text>
+  <text class="s" x="645" y="243" text-anchor="middle">compression</text>
+
+  <!-- upstreams -->
+  <rect class="box" x="810" y="20" width="170" height="50" rx="8"/>
+  <text class="t" x="895" y="43" text-anchor="middle">other hosts</text>
+  <text class="s" x="895" y="60" text-anchor="middle">not decrypted</text>
+  <rect class="ext" x="810" y="112" width="170" height="50" rx="8"/>
+  <text class="t m" x="895" y="142" text-anchor="middle" font-size="13.5">api.anthropic.com</text>
+  <rect class="ext" x="810" y="282" width="170" height="62" rx="8"/>
+  <text class="t m" x="895" y="307" text-anchor="middle" font-size="13.5">api.openai.com</text>
+  <text class="s m" x="895" y="327" text-anchor="middle" style="font-size:11px">or chatgpt.com/…/codex</text>
+
+  <!-- client to listener -->
+  <path class="main" d="M150 120H284" marker-end="url(#am)"/>
+  <text class="lm m" x="217" y="111" text-anchor="middle" style="font-size:11px">HTTPS_PROXY</text>
+  <path class="main" d="M150 310H284" marker-end="url(#am)"/>
+  <text class="lm m" x="217" y="301" text-anchor="middle" style="font-size:11px">openai_base_url</text>
+
+  <!-- tunnel -->
+  <path class="tun" d="M464 92L808 46" marker-end="url(#at)"/>
+  <text class="lt" x="636" y="60" text-anchor="middle" transform="rotate(-7.6 636 60)">any other host: CONNECT tunnel</text>
+
+  <!-- through headroom -->
+  <path class="main" d="M464 146L568 198" marker-end="url(#am)"/>
+  <path class="main" d="M464 284L568 232" marker-end="url(#am)"/>
+  <path class="main" d="M720 198L808 152" marker-end="url(#am)"/>
+  <path class="main" d="M720 232L808 296" marker-end="url(#am)"/>
+
+  <!-- headroom down: straight to the provider -->
+  <path class="fall" d="M464 120C620 112 720 120 808 134" marker-end="url(#af)"/>
+  <path class="fall" d="M464 322C620 334 720 334 808 326" marker-end="url(#af)"/>
+
+  <!-- legend -->
+  <path class="main" d="M560 384H596"/><text class="s" x="604" y="388">through headroom</text>
+  <path class="fall" d="M740 384H776"/><text class="s" x="784" y="388">headroom down: direct</text>
+</svg>

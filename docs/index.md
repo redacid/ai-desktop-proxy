@@ -6,6 +6,14 @@ context. Closing the window keeps the app in the tray; the proxy services keep r
 
 [![Overview with the proxy, compressor and connected clients](images/overview.png)](images/overview.png)
 
+## How it works
+
+![Request path: Claude Code and Codex go through mitmdump and headroom to the provider; when headroom is down, mitmdump sends requests straight to the provider](images/request-path.svg)
+
+Claude Code reaches the proxy through `HTTPS_PROXY`, Codex through `openai_base_url`. API requests pass through
+headroom, which compresses them. If headroom is down, requests go straight to the provider, uncompressed, and your
+clients keep working. Traffic to other hosts is passed through without being decrypted.
+
 ## Install
 
 Run as your normal desktop user on an x64 Linux distribution with systemd:

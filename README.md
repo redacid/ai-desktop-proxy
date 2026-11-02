@@ -1,5 +1,14 @@
 # AI Desktop Proxy
 
+[![CI](https://github.com/redacid/ai-desktop-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/redacid/ai-desktop-proxy/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/redacid/ai-desktop-proxy?sort=semver)](https://github.com/redacid/ai-desktop-proxy/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/redacid/ai-desktop-proxy/total)](https://github.com/redacid/ai-desktop-proxy/releases)
+[![Last commit](https://img.shields.io/github/last-commit/redacid/ai-desktop-proxy)](https://github.com/redacid/ai-desktop-proxy/commits/main)
+[![Issues](https://img.shields.io/github/issues/redacid/ai-desktop-proxy)](https://github.com/redacid/ai-desktop-proxy/issues)
+[![Stars](https://img.shields.io/github/stars/redacid/ai-desktop-proxy)](https://github.com/redacid/ai-desktop-proxy/stargazers)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://redacid.github.io/ai-desktop-proxy/)
+![Platform](https://img.shields.io/badge/platform-Linux%20x64-informational)
+
 A Linux tray app (Electron) that routes AI coding clients through a local token-compression proxy.
 
 Claude Code Desktop forces `ANTHROPIC_BASE_URL=https://api.anthropic.com`, so a compressor such as
@@ -8,15 +17,7 @@ Claude Code Desktop forces `ANTHROPIC_BASE_URL=https://api.anthropic.com`, so a 
 HTTPS proxy, but takes `openai_base_url` in `~/.codex/config.toml`, so the same mitmdump has a second, reverse
 listener for it:
 
-```
-claude ──HTTPS_PROXY──► mitmdump 127.0.0.1:8877 (systemd user service)
-                          ├─ api.anthropic.com ─► headroom 127.0.0.1:6767 ─► api.anthropic.com
-                          │                       (headroom down → straight to api.anthropic.com)
-                          └─ any other host ─────► plain CONNECT tunnel, not decrypted
-codex ──openai_base_url─► mitmdump 127.0.0.1:8878 (reverse listener, same service)
-                          └─ /v1/… ─────────────► headroom ─► api.openai.com or chatgpt.com/backend-api/codex
-                                                  (headroom down → straight to the API Codex would use)
-```
+![Request path: Claude Code and Codex go through mitmdump and headroom to the provider; when headroom is down, mitmdump sends requests straight to the provider](docs/images/request-path.svg)
 
 What the app does:
 
