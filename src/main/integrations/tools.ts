@@ -10,10 +10,10 @@ import { parse as parseToml } from 'smol-toml'
 import { writeJsonAtomic } from '../fsutil'
 import { HEADROOM_PACKAGE, HEADROOM_PYTHON } from '../compressors/headroom-service'
 
-const IDS: ToolId[] = ['headroom', 'rtk', 'ponytail-claude', 'ponytail-codex', 'chisle-claude', 'serena', 'markitdown', 'context7', 'codebase-memory', 'ccusage']
+const IDS: ToolId[] = ['headroom', 'rtk', 'ponytail-claude', 'ponytail-codex', 'chisle-claude', 'caveman-claude', 'serena', 'markitdown', 'context7', 'codebase-memory', 'ccusage']
 const NAMES: Record<ToolId, string> = {
   headroom: 'headroom', rtk: 'RTK', 'ponytail-claude': 'Ponytail · Claude Code', 'ponytail-codex': 'Ponytail · Codex',
-  'chisle-claude': 'Chisle · Claude Code', serena: 'Serena', markitdown: 'MarkItDown', context7: 'Context7', 'codebase-memory': 'Codebase Memory', ccusage: 'ccusage'
+  'chisle-claude': 'Chisle · Claude Code', 'caveman-claude': 'Caveman · Claude Code', serena: 'Serena', markitdown: 'MarkItDown', context7: 'Context7', 'codebase-memory': 'Codebase Memory', ccusage: 'ccusage'
 }
 export const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000
 const PRESENCE_INTERVAL_MS = 60_000
@@ -21,10 +21,24 @@ const PRESENCE_INTERVAL_MS = 60_000
 /** Client plugins installed from their official marketplace (one ToolId per client). */
 export const PLUGINS = {
   ponytail: { name: 'Ponytail', plugin: 'ponytail@ponytail', marketplace: 'ponytail', repo: 'DietrichGebert/ponytail' },
-  chisle: { name: 'Chisle', plugin: 'chisle@chisle', marketplace: 'chisle', repo: 'JayPokale/Chisle' }
+  chisle: { name: 'Chisle', plugin: 'chisle@chisle', marketplace: 'chisle', repo: 'JayPokale/Chisle' },
+  // Only the plugin: Caveman's full installer also routes the API through its own proxy, which fights ours.
+  caveman: { name: 'Caveman', plugin: 'caveman@caveman', marketplace: 'caveman', repo: 'JuliusBrussee/caveman' }
 } as const
 type PluginKey = keyof typeof PLUGINS
-export const pluginKey = (id: ToolId): PluginKey | null => id.startsWith('ponytail-') ? 'ponytail' : id.startsWith('chisle-') ? 'chisle' : null
+export const pluginKey = (id: ToolId): PluginKey | null =>
+  id.startsWith('ponytail-') ? 'ponytail' : id.startsWith('chisle-') ? 'chisle' : id.startsWith('caveman-') ? 'caveman' : null
+
+/** Plugins that each set a terse "say less" style; two at once repeat those instructions in every session. */
+export const STYLE_PLUGINS: PluginKey[] = ['ponytail', 'chisle', 'caveman']
+
+/** The other style plugins already active in Claude Code, for the warning on a card or before an install. */
+export function styleConflicts(tools: ToolInfo[], key: PluginKey): string[] {
+  if (!STYLE_PLUGINS.includes(key)) return []
+  return STYLE_PLUGINS.filter((k) => k !== key)
+    .filter((k) => tools.some((t) => pluginKey(t.id) === k && t.installed === true && t.enabled !== false))
+    .map((k) => PLUGINS[k].name)
+}
 
 /**
  * MCP servers run by uvx from a pinned PyPI release, registered per client at user scope.
@@ -53,7 +67,7 @@ const MCP_PYTHON = '3.13'
 // PyPI versions incl. pre-releases (markitdown-mcp has only alphas); never anything an argument could abuse.
 const pypiVersion = (v: unknown): string | null => typeof v === 'string' && /^\d+(\.\d+)*([a-z]+\d+)?$/.test(v) ? v : null
 type UpdateKey = 'headroom' | 'rtk' | PluginKey | McpKey | NpxKey | 'ccusage'
-const UPDATE_KEYS: UpdateKey[] = ['headroom', 'rtk', 'ponytail', 'chisle', 'serena', 'markitdown', 'context7', 'codebase-memory', 'ccusage']
+const UPDATE_KEYS: UpdateKey[] = ['headroom', 'rtk', 'ponytail', 'chisle', 'caveman', 'serena', 'markitdown', 'context7', 'codebase-memory', 'ccusage']
 export const CCUSAGE_PKG = 'ccusage'
 // ccusage re-reads every client transcript (seconds of CPU), so its report is refreshed at most this often.
 export const CCUSAGE_INTERVAL_MS = 10 * 60 * 1000
@@ -422,6 +436,10 @@ export class ToolManager extends EventEmitter {
             if (plugin.installed && !codex) info.stats = key === 'ponytail' ? await this.ponytailStats(plugin.version) : await this.chisleStats()
             info.detail = plugin.installed ? `${plugin.enabled ? 'Enabled' : 'Installed but disabled'}. Restart the client after changes.`
               : `Install the official ${PLUGINS[key].name} plugin for this client.`
+            // An older Caveman install (npx installer) keeps its skill outside the plugin system.
+            if (key === 'caveman' && !plugin.installed && await fs.access(join(this.deps.home, '.claude', 'skills', 'caveman')).then(() => true, () => false)) {
+              info.detail += ' A Caveman skill is already in ~/.claude/skills (from its own installer); the plugin would add a second copy.'
+            }
           }
         }
         const dashboards = await this.liveDashboards(dashboardCandidates(id, this.deps.headroomUrl?.() ?? ''))
@@ -648,6 +666,10 @@ export class ToolManager extends EventEmitter {
       } else commands.push({ cmd: cli, args: ['plugin', 'marketplace', 'add', repo] })
       commands.push({ cmd: cli, args: ['plugin', codex ? 'add' : info.installed ? 'update' : 'install', plugin, ...(!codex ? ['--scope', 'user'] : [])] })
       plan.detail = `Use the official ${repo} marketplace and install the latest ${name} plugin${info.latest ? ` (currently ${info.latest})` : ''} for this client. Restart the client afterward.${codex ? ` Review and trust ${name} lifecycle hooks in the client’s /hooks screen; the app does not approve them for you.` : ''}`
+      const others = styleConflicts(this.tools, pluginKey(id)!)
+      if (action === 'install' && others.length) {
+        plan.detail += `\n\nWarning: ${others.join(' and ')} ${others.length > 1 ? 'are' : 'is'} already enabled. ${name} sets the same kind of terse-style instructions; with both on, every session carries both sets. Consider stopping ${others.length > 1 ? 'them' : 'it'} first.`
+      }
     }
     if (commands.length) plan.detail += `\n\nCommands (executed without a shell):\n${commands.map(formatCommand).join('\n')}`
     return plan
