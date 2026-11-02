@@ -1,4 +1,4 @@
-import { Menu, Tray, nativeImage } from 'electron'
+import { app, Menu, Tray, nativeImage } from 'electron'
 import type { AppStatus, Health, ProxyAction } from '@shared/ipc'
 import { resourcePath } from './paths'
 
@@ -52,9 +52,10 @@ export class AppTray {
 
     this.health = health
     if (!this.busyTimer) this.tray.setImage(icon(health))
-    this.tray.setToolTip(`AI Desktop Proxy: ${labels[health]}`)
+    this.tray.setToolTip(`AI Desktop Proxy ${app.getVersion()}: ${labels[health]}`)
     this.tray.setContextMenu(
       Menu.buildFromTemplate([
+        { label: `AI Desktop Proxy v${app.getVersion()}`, enabled: false },
         { label: 'Show', click: () => this.actions.show() },
         { type: 'separator' },
         { label: `Proxy: ${status?.proxy.health ?? 'unknown'}`, enabled: false },
