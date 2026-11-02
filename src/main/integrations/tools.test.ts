@@ -5,10 +5,10 @@ import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CompressorInfo } from '@shared/ipc'
-import { approveToolAction, binaryVersion, dashboardCandidates, extractRtk, newerVersion, officialSource, mcpPin, npxPin, parseCcusage, parseChisleStats, parsePonytailBand, parsePonytailGain, parseRtkGain, rtkConnected, pluginInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
+import { approveToolAction, binaryVersion, dashboardCandidates, extractRtk, newerVersion, officialSource, mcpPin, npxPin, styleConflicts, parseCcusage, parseChisleStats, parsePonytailBand, parsePonytailGain, parseRtkGain, rtkConnected, pluginInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
 
-// headroom, RTK, Ponytail, Chisle, Serena, MarkItDown, Context7, Codebase Memory, ccusage.
-const UPDATE_SOURCES = 9
+// headroom, RTK, Ponytail, Chisle, Caveman, Serena, MarkItDown, Context7, Codebase Memory, ccusage.
+const UPDATE_SOURCES = 10
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))) })
 
@@ -605,5 +605,24 @@ describe('ccusage', () => {
 
     await f.manager.execute(await f.manager.plan('ccusage', 'uninstall'), () => {})
     expect(f.manager.current.find((t) => t.id === 'ccusage')!.installed).toBe(false)
+  })
+})
+
+describe('Caveman and the style plugins', () => {
+  it('installs Caveman from its own marketplace and warns when Ponytail is already active', async () => {
+    const f = await fixture()
+    f.state.marketplace = false
+    const plan = await f.manager.plan('caveman-claude', 'install')
+    expect(plan.commands).toEqual([
+      { cmd: '/fake/claude', args: ['plugin', 'marketplace', 'add', 'JuliusBrussee/caveman'] },
+      { cmd: '/fake/claude', args: ['plugin', 'install', 'caveman@caveman', '--scope', 'user'] }
+    ])
+    expect(plan.detail).toMatch(/Warning: Ponytail is already enabled/)
+  })
+
+  it('lists only other style plugins that are installed and enabled', () => {
+    const t = (id: string, installed: boolean, enabled?: boolean) => ({ id, installed, enabled }) as never
+    expect(styleConflicts([t('ponytail-claude', true, true), t('chisle-claude', true, false), t('caveman-claude', false)], 'caveman')).toEqual(['Ponytail'])
+    expect(styleConflicts([t('ponytail-claude', true, true)], 'ponytail')).toEqual([])
   })
 })

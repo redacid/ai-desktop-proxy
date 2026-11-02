@@ -186,6 +186,14 @@ appear in the Install log. Missing optional tools do not turn the proxy's health
   (`chisle@chisle`), with the same card and per-client switch. Chisle has no Codex plugin (its Codex setup is an
   `npx chisle` run that edits `~/.codex/AGENTS.md`), so the app offers it for Claude Code only. Chisle and
   Ponytail both set a terse "lazy senior developer" style; running both doubles those instructions.
+- **Caveman:** the official Claude Code plugin `caveman@caveman` from the `JuliusBrussee/caveman` marketplace,
+  handled like Chisle (Claude Code only). Caveman's full installer (`npx @caveman-ai/cli`) also starts its own API
+  proxy on `127.0.0.1:8787` and points Claude Code at it, which conflicts with this app's proxy and headroom, so the
+  app installs only the plugin. If a Caveman skill from that installer is already in `~/.claude/skills/caveman`,
+  the card says so: the plugin would add a second copy.
+- **Ponytail, Chisle and Caveman together:** all three set a terse "say less" style. When more than one is active in
+  Claude Code, each of their cards shows a warning, and installing one while another is active adds a warning to
+  the confirmation. Keep one and stop the others.
 - **Serena, MarkItDown:** MCP servers, so there is nothing to install besides `uv`. A switch per client
   registers the server at user scope with the client's own command, run by uvx from a pinned PyPI release:
   `claude mcp add --scope user serena -- uvx --python 3.13 --from serena-agent==<version> serena start-mcp-server

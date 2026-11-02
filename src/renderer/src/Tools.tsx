@@ -19,6 +19,8 @@ const ABOUT: Record<string, { what: string; url: string }> = {
     what: 'MCP server from Microsoft that converts PDF, Word, Excel, PowerPoint, HTML and more into Markdown the agent can read.' },
   Ponytail: { url: 'https://github.com/DietrichGebert/ponytail',
     what: 'Plugin that makes the agent work like a lazy senior developer: the smallest complete change, less code and shorter replies.' },
+  Caveman: { url: 'https://github.com/JuliusBrussee/caveman',
+    what: 'Plugin that makes the agent answer in a terse "caveman" voice: answer first, no filler, every technical fact kept, so replies cost fewer output tokens.' },
   Chisle: { url: 'https://github.com/JayPokale/Chisle',
     what: 'Plugin for terse, zero-fluff answers and YAGNI-first code; also trims oversized tool output.' }
 }
@@ -169,12 +171,29 @@ export function Tools({ disabled, onBusy, onLogStart, headroom }: {
     ) : null
 
   /** One card per plugin with a row per client, whose switch installs or uninstalls it there. */
+  // Ponytail, Chisle and Caveman all set a terse style; active together, every session carries each set.
+  const STYLE = ['Ponytail', 'Chisle', 'Caveman']
+  const active = (name: string): boolean =>
+    tools.some((t) => t.id.startsWith(`${name.toLowerCase()}-`) && t.installed === true && t.enabled !== false)
+  const styleWarning = (name: string): React.JSX.Element | null => {
+    if (!STYLE.includes(name)) return null
+    const others = STYLE.filter((n) => n !== name && active(n))
+    if (!others.length) return null
+    return (
+      <p className="note" role="note">
+        {active(name) ? 'Also active' : 'Already active'}: {others.join(', ')}. These plugins set the same kind of terse style;
+        {active(name) ? ' with more than one on, every session carries each set of instructions. Keep one and stop the others.' : ' adding this one doubles those instructions.'}
+      </p>
+    )
+  }
+
   const pluginCard = (name: string, group: ToolInfo[]): React.JSX.Element | null => group.length ? (
     <article className="tool" key={name} title={ABOUT[name]?.what}>
       <div className="client-main">
         <Title name={name} about={ABOUT[name]} />
         {group[0].latest && <span className="badge">latest v{group[0].latest}</span>}
       </div>
+      {styleWarning(name)}
       {group.map((t) => t.stats).find(Boolean) && <Stats stats={group.map((t) => t.stats).find(Boolean)!} />}
       <ul className="clients">
         {group.map((tool) => (
@@ -272,6 +291,7 @@ export function Tools({ disabled, onBusy, onLogStart, headroom }: {
         ))}
         {pluginCard('Ponytail', tools.filter((t) => t.id.startsWith('ponytail-')))}
         {pluginCard('Chisle', tools.filter((t) => t.id.startsWith('chisle-')))}
+        {pluginCard('Caveman', tools.filter((t) => t.id.startsWith('caveman-')))}
       </div>
     </section>
   )
