@@ -337,6 +337,12 @@ export function App(): React.JSX.Element {
           <h1>
             <span className={`dot ${status.overall}`} /> AI Desktop Proxy
             {appUpdate && <span className="badge version" title="Installed version">v{appUpdate.currentVersion}</span>}
+            {appUpdate?.version && appUpdate.version !== appUpdate.currentVersion && (
+              <button className="badge version update-badge" onClick={() => setTab('settings')}
+                title="Open Settings → App updates">
+                {appUpdate.phase === 'ready' ? `v${appUpdate.version} ready to install` : `v${appUpdate.version} available`}
+              </button>
+            )}
           </h1>
           <p className="subtitle">{SUMMARY[status.overall]}</p>
         </div>

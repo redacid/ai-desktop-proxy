@@ -3,7 +3,7 @@ import { autoUpdater } from 'electron-updater'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron'
 import {
   IPC,
   type ActionResult,
@@ -381,7 +381,20 @@ if (!app.requestSingleInstanceLock()) {
     const supported = app.isPackaged && (['deb', 'rpm'].includes(packageType.trim()) || !!process.env.APPIMAGE)
     appUpdates = new AppUpdates(supported ? autoUpdater : null, app.getVersion(),
       join(app.getPath('userData'), 'updates.json'), () => busy)
-    appUpdates.on('change', (state) => win?.webContents.send(IPC.updateChanged, state))
+    let notified: string | null = null
+    appUpdates.on('change', (state) => {
+      win?.webContents.send(IPC.updateChanged, state)
+      const ready = state.phase === 'ready' ? state.version : null
+      tray?.setUpdate(ready)
+      // The window usually sits in the tray, so say once per version that an update is waiting.
+      if (ready && ready !== notified && Notification.isSupported()) {
+        notified = ready
+        const note = new Notification({ title: `AI Desktop Proxy ${ready} is ready`,
+          body: 'Open the app and press Update and restart, or use the tray menu.' })
+        note.on('click', showWindow)
+        note.show()
+      }
+    })
     ipcMain.handle(IPC.getUpdate, () => appUpdates!.current)
     ipcMain.handle(IPC.updatePreferences, (_e, prefs) => appUpdates!.preferences(prefs))
     ipcMain.handle(IPC.updateAction, (_e, action: string) => {
@@ -419,12 +432,16 @@ if (!app.requestSingleInstanceLock()) {
         void proxyAction(action).then((r) => {
           if (r.error) dialog.showErrorBox('AI Desktop Proxy', r.error)
         }),
+      installUpdate: () => {
+        try { appUpdates?.install() } catch (err) { dialog.showErrorBox('AI Desktop Proxy', (err as Error).message) }
+      },
       quit: () => {
         quitting = true
         app.quit()
       }
     })
 
+    tray.setUpdate(appUpdates.current.phase === 'ready' ? appUpdates.current.version : null)
     monitor.on('change', (status) => {
       tray?.update(status)
       win?.webContents.send(IPC.statusChanged, status)

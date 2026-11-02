@@ -23,6 +23,7 @@ export interface TrayActions {
   refresh(): void
   setClientEnabled(id: string, enabled: boolean): void
   proxyAction(action: ProxyAction): void
+  installUpdate(): void
   quit(): void
 }
 
@@ -32,6 +33,8 @@ export class AppTray {
   private health: Health = 'unknown'
   private busyTimer: NodeJS.Timeout | null = null
   private busyFrames: Electron.NativeImage[] = []
+  private status: AppStatus | null = null
+  private updateReady: string | null = null
 
   constructor(private actions: TrayActions) {
     this.tray = new Tray(icon('unknown'))
@@ -39,23 +42,33 @@ export class AppTray {
     this.update(null)
   }
 
+  /** A downloaded app update gets its own menu item, so it is seen without opening the window. */
+  setUpdate(version: string | null): void {
+    if (version === this.updateReady) return
+    this.updateReady = version
+    this.lastKey = ''
+    this.update(this.status)
+  }
+
   update(status: AppStatus | null): void {
+    this.status = status
     const health = status?.overall ?? 'unknown'
     const clients = status?.clientList ?? []
     // Rebuilding the menu on every poll makes some Linux trays flicker; only do it on change.
     const proxyUp = !!status?.proxyInfo?.listening
     const canStart = !!status?.proxyInfo?.mitmdump && status.proxyInfo.unit !== 'missing'
-    const key = JSON.stringify([health, status?.proxy.health, status?.compressor.health, proxyUp, canStart,
+    const key = JSON.stringify([this.updateReady, health, status?.proxy.health, status?.compressor.health, proxyUp, canStart,
       clients.map((c) => [c.id, c.enabled, c.state])])
     if (key === this.lastKey) return
     this.lastKey = key
 
     this.health = health
     if (!this.busyTimer) this.tray.setImage(icon(health))
-    this.tray.setToolTip(`AI Desktop Proxy ${app.getVersion()}: ${labels[health]}`)
+    this.tray.setToolTip(`AI Desktop Proxy ${app.getVersion()}: ${labels[health]}${this.updateReady ? ` · update ${this.updateReady} ready` : ''}`)
     this.tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: `AI Desktop Proxy v${app.getVersion()}`, enabled: false },
+        ...(this.updateReady ? [{ label: `Update to v${this.updateReady} and restart`, click: () => this.actions.installUpdate() }] : []),
         { label: 'Show', click: () => this.actions.show() },
         { type: 'separator' },
         { label: `Proxy: ${status?.proxy.health ?? 'unknown'}`, enabled: false },
