@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.5 — 2026-11-02
+
+Changes since 0.2.4.
+
+- Make app updates visible and recoverable (#8) (5c7cfb8)
+- Add the MIT license file (5b3bf01)
+
 ## 0.2.4 — 2026-11-02
 
 Changes since 0.2.3.
