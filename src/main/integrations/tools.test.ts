@@ -5,8 +5,10 @@ import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CompressorInfo } from '@shared/ipc'
-import { approveToolAction, binaryVersion, dashboardCandidates, extractRtk, newerVersion, officialSource, mcpPin, npxPin, parseChisleStats, parsePonytailBand, parsePonytailGain, parseRtkGain, rtkConnected, pluginInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
+import { approveToolAction, binaryVersion, dashboardCandidates, extractRtk, newerVersion, officialSource, mcpPin, npxPin, parseCcusage, parseChisleStats, parsePonytailBand, parsePonytailGain, parseRtkGain, rtkConnected, pluginInfo, releaseVersion, rtkUrls, ToolManager, UPDATE_INTERVAL_MS } from './tools'
 
+// headroom, RTK, Ponytail, Chisle, Serena, MarkItDown, Context7, Codebase Memory, ccusage.
+const UPDATE_SOURCES = 9
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))) })
 
@@ -135,18 +137,18 @@ describe('tool detection and update cadence', () => {
     expect(f.setup).not.toHaveBeenCalled()
   })
 
-  // Eight update sources: headroom, RTK, Ponytail, Chisle, Serena, MarkItDown, Context7, Codebase Memory.
+  // One request per update source; UPDATE_SOURCES grows with each tool.
   it('throttles network checks, shares in-flight work, and supports a forced check', async () => {
     const f = await fixture()
     await Promise.all([f.manager.refresh(), f.manager.refresh()])
-    expect(f.request).toHaveBeenCalledTimes(8)
+    expect(f.request).toHaveBeenCalledTimes(UPDATE_SOURCES)
     await f.manager.refresh()
-    expect(f.request).toHaveBeenCalledTimes(8)
+    expect(f.request).toHaveBeenCalledTimes(UPDATE_SOURCES)
     f.state.now += UPDATE_INTERVAL_MS
     await f.manager.refresh()
-    expect(f.request).toHaveBeenCalledTimes(16)
+    expect(f.request).toHaveBeenCalledTimes(2 * UPDATE_SOURCES)
     await f.manager.refresh(true)
-    expect(f.request).toHaveBeenCalledTimes(24)
+    expect(f.request).toHaveBeenCalledTimes(3 * UPDATE_SOURCES)
     expect(f.stream).not.toHaveBeenCalled()
   })
 
@@ -154,7 +156,7 @@ describe('tool detection and update cadence', () => {
     const f = await fixture()
     await f.manager.refresh()
     const restarted = new ToolManager(f.deps)
-    try { await restarted.start(); expect(f.request).toHaveBeenCalledTimes(8) }
+    try { await restarted.start(); expect(f.request).toHaveBeenCalledTimes(UPDATE_SOURCES) }
     finally { restarted.stop() }
   })
 
@@ -165,7 +167,7 @@ describe('tool detection and update cadence', () => {
     const tools = await f.manager.refresh(true)
     expect(tools[0]).toMatchObject({ installed: true, latest: '0.41.0', error: expect.stringContaining('offline') })
     await f.manager.refresh()
-    expect(f.request).toHaveBeenCalledTimes(16)
+    expect(f.request).toHaveBeenCalledTimes(2 * UPDATE_SOURCES)
   })
 
   it('does not offer installation on a detection failure', async () => {
@@ -573,5 +575,35 @@ describe('CBM Lens', () => {
     await f.manager.execute(stop, () => {})
     expect(f.manager.current.find((t) => t.id === 'codebase-memory')!.dashboards).toBeUndefined()
     await expect(f.manager.plan('serena', 'dashboard-start')).rejects.toThrow(/no dashboard/)
+  })
+})
+
+describe('ccusage', () => {
+  it('reads totals and the daily series from ccusage daily --json', () => {
+    const stats = parseCcusage({
+      daily: [{ period: '2026-11-01', totalTokens: 1000, totalCost: 1.5 }, { period: '2026-11-02', totalTokens: 3_000_000, totalCost: 2.25 }],
+      totals: { totalCost: 3.75, totalTokens: 3_001_000, cacheReadTokens: 2_500_000 }
+    })!
+    expect(stats.facts.map((f) => f.value)).toEqual(['$3.75', '3M', '2.5M', '$2.25'])
+    expect(stats.daily).toEqual([{ day: '2026-11-01', value: 1000 }, { day: '2026-11-02', value: 3_000_000 }])
+    expect(parseCcusage({})).toBeNull()
+  })
+
+  it('runs only after it is enabled, with the pinned version', async () => {
+    const f = await fixture()
+    f.runner.mockImplementationOnce(async () => ({ code: 0, stdout: '', stderr: '' }))
+    const before = (await f.manager.refresh(true)).find((t) => t.id === 'ccusage')!
+    expect(before).toMatchObject({ installed: false, version: null })
+    expect(f.runner.mock.calls.some(([, args]) => args.includes('daily'))).toBe(false)
+
+    const plan = await f.manager.plan('ccusage', 'install')
+    expect(plan.commands).toEqual([{ cmd: '/fake/npx', args: ['-y', 'ccusage@5.4.0', '--version'] }])
+    await f.manager.execute(plan, () => {})
+    expect(f.manager.current.find((t) => t.id === 'ccusage')).toMatchObject({ installed: true, version: '5.4.0' })
+    await f.manager.refresh(true)
+    expect(f.runner.mock.calls.some(([, args]) => args.includes('ccusage@5.4.0') && args.includes('daily'))).toBe(true)
+
+    await f.manager.execute(await f.manager.plan('ccusage', 'uninstall'), () => {})
+    expect(f.manager.current.find((t) => t.id === 'ccusage')!.installed).toBe(false)
   })
 })

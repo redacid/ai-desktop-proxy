@@ -10,10 +10,10 @@ import { parse as parseToml } from 'smol-toml'
 import { writeJsonAtomic } from '../fsutil'
 import { HEADROOM_PACKAGE, HEADROOM_PYTHON } from '../compressors/headroom-service'
 
-const IDS: ToolId[] = ['headroom', 'rtk', 'ponytail-claude', 'ponytail-codex', 'chisle-claude', 'serena', 'markitdown', 'context7', 'codebase-memory']
+const IDS: ToolId[] = ['headroom', 'rtk', 'ponytail-claude', 'ponytail-codex', 'chisle-claude', 'serena', 'markitdown', 'context7', 'codebase-memory', 'ccusage']
 const NAMES: Record<ToolId, string> = {
   headroom: 'headroom', rtk: 'RTK', 'ponytail-claude': 'Ponytail · Claude Code', 'ponytail-codex': 'Ponytail · Codex',
-  'chisle-claude': 'Chisle · Claude Code', serena: 'Serena', markitdown: 'MarkItDown', context7: 'Context7', 'codebase-memory': 'Codebase Memory'
+  'chisle-claude': 'Chisle · Claude Code', serena: 'Serena', markitdown: 'MarkItDown', context7: 'Context7', 'codebase-memory': 'Codebase Memory', ccusage: 'ccusage'
 }
 export const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000
 const PRESENCE_INTERVAL_MS = 60_000
@@ -52,8 +52,12 @@ const mcpKey = (id: ToolId): McpKey | null => id === 'serena' || id === 'markitd
 const MCP_PYTHON = '3.13'
 // PyPI versions incl. pre-releases (markitdown-mcp has only alphas); never anything an argument could abuse.
 const pypiVersion = (v: unknown): string | null => typeof v === 'string' && /^\d+(\.\d+)*([a-z]+\d+)?$/.test(v) ? v : null
-type UpdateKey = 'headroom' | 'rtk' | PluginKey | McpKey | NpxKey
-const UPDATE_KEYS: UpdateKey[] = ['headroom', 'rtk', 'ponytail', 'chisle', 'serena', 'markitdown', 'context7', 'codebase-memory']
+type UpdateKey = 'headroom' | 'rtk' | PluginKey | McpKey | NpxKey | 'ccusage'
+const UPDATE_KEYS: UpdateKey[] = ['headroom', 'rtk', 'ponytail', 'chisle', 'serena', 'markitdown', 'context7', 'codebase-memory', 'ccusage']
+export const CCUSAGE_PKG = 'ccusage'
+// ccusage re-reads every client transcript (seconds of CPU), so its report is refreshed at most this often.
+export const CCUSAGE_INTERVAL_MS = 10 * 60 * 1000
+const CCUSAGE_DAYS = 14
 const updateKey = (id: ToolId): UpdateKey => pluginKey(id) ?? id as UpdateKey
 
 type Json = Record<string, unknown>
@@ -102,6 +106,26 @@ export function mcpPin(entry: unknown, pkg: string): string | null {
   const spec = from >= 0 ? args[from + 1] : null
   if (typeof e.command !== 'string' || !/(^|\/)uvx$/.test(e.command) || typeof spec !== 'string' || !spec.startsWith(`${pkg}==`)) return null
   return pypiVersion(spec.slice(pkg.length + 2))
+}
+
+/** `ccusage daily --json`: real usage from Claude Code and Codex logs (what the user spent, not what tools saved). */
+export function parseCcusage(raw: unknown): ToolStats | null {
+  const r = object(raw)
+  if (!Array.isArray(r.daily)) return null
+  const days = r.daily.map(object).filter((d) => typeof d.period === 'string')
+  const totals = object(r.totals)
+  const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
+  const today = days.at(-1)
+  return {
+    source: `ccusage, Claude Code and Codex logs on this machine, last ${CCUSAGE_DAYS} days`,
+    facts: [
+      { label: `cost, ${CCUSAGE_DAYS} days`, value: `$${num(totals.totalCost).toFixed(2)}` },
+      { label: `tokens, ${CCUSAGE_DAYS} days`, value: compact.format(num(totals.totalTokens)) },
+      { label: 'cache reads', value: compact.format(num(totals.cacheReadTokens)) },
+      { label: `cost, ${today ? String(today.period) : 'today'}`, value: `$${num(today?.totalCost).toFixed(2)}` }
+    ],
+    daily: days.map((d) => ({ day: d.period as string, value: num(d.totalTokens) }))
+  }
 }
 
 /** An entry registered by this app: npx running `<pkg>@<version>`. */
@@ -261,6 +285,10 @@ export class ToolManager extends EventEmitter {
   private readonly binary: string
   private readonly rtkLink: string
   private readonly cacheFile: string
+  /** The ccusage release the user approved; without it ccusage never runs. */
+  private readonly ccusageFile: string
+  private ccusageReport: { stats: ToolStats | null; at: number; error: string | null } | null = null
+  private ccusageRunning = false
   private updates = Object.fromEntries(UPDATE_KEYS.map((k) => [k, emptyUpdate()])) as UpdateCache
   private tools: ToolInfo[] = IDS.map((id) => ({ id, name: NAMES[id], installed: null, version: null, latest: null,
     updateAvailable: false, checkedAt: null, error: null, blocked: 'Checking installation…', detail: 'Not checked yet.', stats: null }))
@@ -278,6 +306,7 @@ export class ToolManager extends EventEmitter {
     this.binary = join(deps.root, 'tools', 'rtk')
     this.rtkLink = join(deps.home, '.local', 'bin', 'rtk')
     this.cacheFile = join(deps.root, 'tool-updates.json')
+    this.ccusageFile = join(deps.root, 'ccusage.json')
   }
 
   get current(): ToolInfo[] { return structuredClone(this.tools) }
@@ -330,6 +359,7 @@ export class ToolManager extends EventEmitter {
       : key === 'rtk' ? 'https://api.github.com/repos/rtk-ai/rtk/releases/latest'
       : mcp ? `https://pypi.org/pypi/${mcp.pkg}/json`
       : npxKey(key) ? `https://registry.npmjs.org/${NPX_SERVERS[npxKey(key)!].pkg}/latest`
+      : key === 'ccusage' ? `https://registry.npmjs.org/${CCUSAGE_PKG}/latest`
       : `https://raw.githubusercontent.com/${PLUGINS[key as PluginKey].repo}/main/.claude-plugin/plugin.json`
     const raw = object(JSON.parse((await this.response(url, 8 * 1024 * 1024)).toString('utf8')))
     const version = mcp ? pypiVersion(object(raw.info).version)
@@ -371,6 +401,8 @@ export class ToolManager extends EventEmitter {
           if (!['x64', 'arm64'].includes(this.deps.arch ?? process.arch)) info.blocked = 'RTK binary installation supports Linux x64 and arm64.'
           info.detail = binary === this.binary ? 'App-managed binary. Connect it to each client below.'
             : binary ? `Found at ${binary}. Updates install a separate app-managed copy.` : 'Reduces command output before the agent reads it.'
+        } else if (id === 'ccusage') {
+          await this.detectCcusage(info)
         } else if (npxKey(id)) {
           await this.detectRemote(info)
         } else if (mcpKey(id)) {
@@ -394,7 +426,7 @@ export class ToolManager extends EventEmitter {
         }
         const dashboards = await this.liveDashboards(dashboardCandidates(id, this.deps.headroomUrl?.() ?? ''))
         if (dashboards.length) info.dashboards = dashboards
-        info.updateAvailable = info.installed === true && (mcpKey(id) || npxKey(id)
+        info.updateAvailable = info.installed === true && (mcpKey(id) || npxKey(id) || id === 'ccusage'
           ? !!info.version && !!info.latest && info.version !== info.latest
           : newerVersion(info.latest, info.version))
       } catch (err) { info.error = [info.error, `Detection failed: ${(err as Error).message}`].filter(Boolean).join('\n'); info.blocked = 'Resolve the detection error before changing this tool.' }
@@ -467,6 +499,41 @@ export class ToolManager extends EventEmitter {
     if (viaPlugin) info.detail += ` Claude Code already has it from the ${plugin} plugin.`
   }
 
+  private async ccusageVersion(): Promise<string | null> {
+    try { return releaseVersion(object(JSON.parse(await fs.readFile(this.ccusageFile, 'utf8'))).version) } catch { return null }
+  }
+
+  /** Shows the last report and, when it is stale, refreshes it in the background so checks never wait for it. */
+  private async detectCcusage(info: ToolInfo): Promise<void> {
+    const npx = await this.find('npx')
+    info.version = await this.ccusageVersion()
+    info.installed = !!npx && !!info.version
+    if (!npx) { info.blocked = 'Install Node.js (it provides npx) first.'; info.detail = 'Runs with npx from npm.'; return }
+    info.detail = info.version
+      ? `Reads Claude Code and Codex logs locally with npx ${CCUSAGE_PKG}@${info.version}; refreshed every ${CCUSAGE_INTERVAL_MS / 60_000} minutes. Shows what you spent, not what the tools saved.`
+      : 'Reports real token use and cost from Claude Code and Codex logs. Enable it to run it with npx.'
+    if (!info.version) { this.ccusageReport = null; return }
+    info.stats = this.ccusageReport?.stats ?? null
+    if (this.ccusageReport?.error) info.error = [info.error, this.ccusageReport.error].filter(Boolean).join('\n')
+    if (!this.ccusageRunning && (!this.ccusageReport || this.now() - this.ccusageReport.at >= CCUSAGE_INTERVAL_MS)) {
+      this.ccusageRunning = true
+      void this.runCcusage(npx, info.version).finally(() => { this.ccusageRunning = false })
+    }
+  }
+
+  private async runCcusage(npx: string, version: string): Promise<void> {
+    const since = new Date(this.now() - (CCUSAGE_DAYS - 1) * 86_400_000).toISOString().slice(0, 10).replace(/-/g, '')
+    const r = await this.runner(npx, ['-y', `${CCUSAGE_PKG}@${version}`, 'daily', '--json', '--since', since])
+    let stats: ToolStats | null = null
+    try { stats = r.code === 0 ? parseCcusage(JSON.parse(r.stdout)) : null } catch { /* reported below */ }
+    this.ccusageReport = { stats, at: this.now(), error: stats ? null : `ccusage report failed: ${(r.stderr || r.stdout).trim().split('\n').slice(-2).join(' ') || 'no data'}` }
+    const tool = this.tools.find((t) => t.id === 'ccusage')
+    if (tool && !this.mutation) {
+      tool.stats = stats
+      this.emit('change', this.current)
+    }
+  }
+
   /** The candidates that answer 2xx within a second; the rest are not running. */
   private async liveDashboards(urls: string[]): Promise<string[]> {
     const probe = this.deps.probe ?? probeDashboard
@@ -504,6 +571,7 @@ export class ToolManager extends EventEmitter {
     if (action === 'update' && !info.updateAvailable) throw new Error('No newer stable version is available')
     const commands: Command[] = []
     const plan: ToolPlan = { id, action, commands, version: info.latest, detail: '' }
+    if (id === 'ccusage') return this.ccusagePlan(info, action, plan)
     if (action === 'stop' || action === 'start' || action === 'uninstall') return this.lifecyclePlan(info, action, plan)
     if (action === 'dashboard-start' || action === 'dashboard-stop') return this.dashboardPlan(info, action, plan)
     if (npxKey(id)) return this.remotePlan(info, action, plan)
@@ -684,6 +752,21 @@ export class ToolManager extends EventEmitter {
     return plan
   }
 
+  /** Enable (pin the latest release and run it once), update the pin, or disable; ccusage changes no client. */
+  private async ccusagePlan(info: ToolInfo, action: ToolAction, plan: ToolPlan): Promise<ToolPlan> {
+    const npx = await this.find('npx')
+    if (!npx) throw new Error('Install Node.js (it provides npx) first')
+    if (action === 'install' || action === 'update') {
+      if (!plan.version) throw new Error('Check for updates successfully before enabling ccusage')
+      plan.commands.push({ cmd: npx, args: ['-y', `${CCUSAGE_PKG}@${plan.version}`, '--version'] })
+      plan.detail = `Downloads ${CCUSAGE_PKG}@${plan.version} from npm into the npx cache and pins it. The app then runs \`npx -y ${CCUSAGE_PKG}@${plan.version} daily --json\` every ${CCUSAGE_INTERVAL_MS / 60_000} minutes; it only reads ~/.claude and ~/.codex logs.`
+    } else if (action === 'uninstall') {
+      plan.detail = 'Stops running ccusage and forgets the pinned version. The npx cache is left as it is.'
+    } else throw new Error('ccusage has no clients to switch; enable or remove it')
+    if (plan.commands.length) plan.detail += `\n\nCommands (executed without a shell):\n${plan.commands.map(formatCommand).join('\n')}`
+    return plan
+  }
+
   private async remotePlan(info: ToolInfo, action: ToolAction, plan: ToolPlan): Promise<ToolPlan> {
     const { pkg } = NPX_SERVERS[npxKey(info.id)!]
     const npx = (await this.find('npx'))!
@@ -776,6 +859,11 @@ export class ToolManager extends EventEmitter {
         const code = await this.stream(command.cmd, command.args, log)
         if (code !== 0) throw new Error(`${command.cmd} exited with ${code}. Earlier commands may have completed; check the log before retrying.`)
       }
+      if (plan.id === 'ccusage') {
+        if (plan.action === 'uninstall') await fs.rm(this.ccusageFile, { force: true })
+        else await writeJsonAtomic(this.ccusageFile, { version: plan.version })
+        this.ccusageReport = null
+      }
       if (plan.id === 'rtk' && plan.action === 'uninstall') {
         if (await this.ownsRtkLink()) await fs.rm(this.rtkLink)
         await fs.rm(this.binary, { force: true })
@@ -804,6 +892,11 @@ export class ToolManager extends EventEmitter {
         Object.assign(info, this.tools.find((e) => e.id === plan.id))
       }
       if (!!info.dashboards?.length !== want) throw new Error(`Command completed, but CBM Lens is ${want ? 'not answering' : 'still answering'} at ${CBM_LENS_URL}.`)
+    }
+    if (plan.id === 'ccusage') {
+      if ((plan.action === 'uninstall') === (info.installed === true)) throw new Error(`Command completed, but ccusage is still ${plan.action === 'uninstall' ? 'enabled' : 'not enabled'}.`)
+      log('Done.')
+      return
     }
     if (plan.action === 'remove' && info.installed !== false) throw new Error(`Command completed, but ${info.name} is still listed as installed. ${info.error ?? 'Check the client plugin manager.'}`)
     if (plan.action.startsWith('disconnect-') && info.connected?.[client] !== false) throw new Error(`Command completed, but ${info.name} still shows as connected to ${client === 'codex' ? 'Codex' : 'Claude Code'}.`)
