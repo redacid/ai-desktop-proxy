@@ -4,9 +4,10 @@ Electron tray app (TypeScript, React, electron-vite) that routes AI coding clien
 a token compressor (headroom), and manages both as systemd user services. Linux only for now.
 
 Read before changing code:
-- [docs/architecture.md](docs/architecture.md): modules, request path, client state machine, **invariants**
-- [docs/development.md](docs/development.md): commands, tests, how to add a client or compressor
-- [docs/user-guide.md](docs/user-guide.md): what the user sees; keep it true
+- [docs-dev/architecture.md](docs-dev/architecture.md): modules, request path, client state machine, **invariants**
+- [docs-dev/development.md](docs-dev/development.md): commands, tests, how to add a client or compressor
+- [docs/](docs/): user documentation published to GitHub Pages (install, interface, user guide, tools); keep it
+  true and free of developer detail
 
 ## Commands
 
@@ -20,8 +21,8 @@ make run       # build and start the app (needs a display)
 ## Rules
 
 - **Documentation is part of the change.** Any feature, behaviour change, new setting, new file the app writes,
-  or new make target updates `docs/` (and the README status) in the same commit. Documentation is in English.
-- Keep the invariants in `docs/architecture.md`. In short: never overwrite or remove config values the app did not
+  or new make target updates `docs/` for users and `docs-dev/` for internals (and the README status) in the same commit. Documentation is in English.
+- Keep the invariants in `docs-dev/architecture.md`. In short: never overwrite or remove config values the app did not
   write; never write a config that failed to parse; clients come off the proxy before the proxy stops; never
   enable a client while the proxy is not listening; never start a service on a port another process holds; never
   touch a headroom the app did not start; install nothing without a confirmation that names the command.
@@ -36,5 +37,5 @@ make run       # build and start the app (needs a display)
 ## Environment notes
 
 - There may be no systemd user session (containers, CI). Unit tests do not need one; for end-to-end runs see
-  "End-to-end without systemd" in `docs/development.md`.
+  "End-to-end without systemd" in `docs-dev/development.md`.
 - Do not `pkill -f <pattern>` from a shell whose own command line contains the pattern; it kills that shell.

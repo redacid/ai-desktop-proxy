@@ -1,5 +1,14 @@
 # AI Desktop Proxy
 
+[![CI](https://github.com/redacid/ai-desktop-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/redacid/ai-desktop-proxy/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/redacid/ai-desktop-proxy?sort=semver)](https://github.com/redacid/ai-desktop-proxy/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/redacid/ai-desktop-proxy/total)](https://github.com/redacid/ai-desktop-proxy/releases)
+[![Last commit](https://img.shields.io/github/last-commit/redacid/ai-desktop-proxy)](https://github.com/redacid/ai-desktop-proxy/commits/main)
+[![Issues](https://img.shields.io/github/issues/redacid/ai-desktop-proxy)](https://github.com/redacid/ai-desktop-proxy/issues)
+[![Stars](https://img.shields.io/github/stars/redacid/ai-desktop-proxy)](https://github.com/redacid/ai-desktop-proxy/stargazers)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://redacid.github.io/ai-desktop-proxy/)
+![Platform](https://img.shields.io/badge/platform-Linux%20x64-informational)
+
 A Linux tray app (Electron) that routes AI coding clients through a local token-compression proxy.
 
 Claude Code Desktop forces `ANTHROPIC_BASE_URL=https://api.anthropic.com`, so a compressor such as
@@ -8,15 +17,7 @@ Claude Code Desktop forces `ANTHROPIC_BASE_URL=https://api.anthropic.com`, so a 
 HTTPS proxy, but takes `openai_base_url` in `~/.codex/config.toml`, so the same mitmdump has a second, reverse
 listener for it:
 
-```
-claude ──HTTPS_PROXY──► mitmdump 127.0.0.1:8877 (systemd user service)
-                          ├─ api.anthropic.com ─► headroom 127.0.0.1:6767 ─► api.anthropic.com
-                          │                       (headroom down → straight to api.anthropic.com)
-                          └─ any other host ─────► plain CONNECT tunnel, not decrypted
-codex ──openai_base_url─► mitmdump 127.0.0.1:8878 (reverse listener, same service)
-                          └─ /v1/… ─────────────► headroom ─► api.openai.com or chatgpt.com/backend-api/codex
-                                                  (headroom down → straight to the API Codex would use)
-```
+![Request path: Claude Code and Codex go through mitmdump and headroom to the provider; when headroom is down, mitmdump sends requests straight to the provider](docs/images/request-path.svg)
 
 What the app does:
 
@@ -48,7 +49,7 @@ less install.sh
 bash install.sh
 ```
 
-See [installation details](docs/user-guide.md#installing-a-release) for prerequisites and file locations.
+See [Install and update](docs/install.md) for requirements, what the installer does and how to uninstall.
 
 ## Quick start (from source)
 
@@ -59,7 +60,7 @@ make install   # npm dependencies and the Electron binary
 make run       # build and start the app
 ```
 
-In the window: **Install mitmproxy** (or **Apply** if the old `cdp.sh` unit exists), make sure headroom answers
+In the window: **Install mitmproxy**, make sure headroom answers
 (**Install headroom** if it does not), then switch **Claude Code** or **Codex** on. Open a new session to use it;
 running sessions keep their old settings.
 
@@ -72,13 +73,22 @@ running sessions keep their old settings.
 The screenshots use demonstration data. The site is published from the released revision after a successful
 GitHub Release, once GitHub Pages is enabled in the repository settings.
 
+User documentation (`docs/`, published to the site):
+
 | Document | For |
 |---|---|
+| [docs/install.md](docs/install.md) | Requirements, installation, app updates, uninstalling |
 | [docs/interface.md](docs/interface.md) | Screenshots of every tab and what each control does |
-| [docs/user-guide.md](docs/user-guide.md) | Using the app: cards, actions, settings, troubleshooting |
-| [docs/architecture.md](docs/architecture.md) | How it works: processes, modules, files it writes, safety rules |
-| [docs/development.md](docs/development.md) | Building, testing, extending (new clients, compressors) |
-| [docs/plan.md](docs/plan.md) | Planned work and deferred headroom integration improvements |
+| [docs/user-guide.md](docs/user-guide.md) | Using the app: cards, actions, settings, files, troubleshooting |
+| [docs/tools.md](docs/tools.md) | The optional tools and what their buttons change |
+
+Developer documentation (`docs-dev/`, not published):
+
+| Document | For |
+|---|---|
+| [docs-dev/architecture.md](docs-dev/architecture.md) | How it works: processes, modules, files it writes, safety rules |
+| [docs-dev/development.md](docs-dev/development.md) | Building, testing, extending, releases, documentation site |
+| [docs-dev/roadmap.md](docs-dev/roadmap.md) | Planned work and deferred headroom integration improvements |
 | [AGENTS.md](AGENTS.md) | Instructions for coding agents working in this repository |
 | [legacy/README.md](legacy/README.md) | The original shell version (`cdp.sh`), kept for reference |
 
@@ -87,13 +97,13 @@ GitHub Release, once GitHub Pages is enabled in the repository settings.
 Done: Claude Code and Codex clients, mitmproxy service with headroom fallback, headroom service with its options in Settings,
 statistics with expandable recent requests, approved tool installation/update checks and RTK client connections, settings,
 start at login. Illustrated documentation builds into GitHub Pages on release. GitHub CI validates every push; version tags publish deb/rpm releases. Not yet: package installation smoke tests, Cursor client, macOS.
-Planned headroom improvements: diagnostics, quotas, detailed savings, CCR inspection and tuning; see [the project plan](docs/plan.md).
+Planned headroom improvements: diagnostics, quotas, detailed savings, CCR inspection and tuning; see [the roadmap](docs-dev/roadmap.md).
 
 ## CI and releases
 
 GitHub Actions runs validation, tests and a build on every push and pull request. A pushed version tag such as
 `0.1.0` additionally builds Linux x64 deb/rpm packages and publishes them in a GitHub Release after checks pass.
-See [release instructions](docs/development.md#github-ci-and-releases).
+See [release instructions](docs-dev/development.md#github-ci-and-releases).
 
 Use `make bump` to increment the app version, or `make version VERSION=0.2.0` to also prepare CHANGELOG.md.
 GitHub Release descriptions use that version’s changelog section.
