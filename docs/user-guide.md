@@ -234,6 +234,15 @@ Registrations or marketplaces set up outside the app are never touched.
   so the card has **Stop** but no **Remove from system**. The project's full installer (`codebase-memory-mcp install`,
   with skills and hooks) is not used.
 
+- **ccusage:** [ccusage](https://github.com/ryoppippi/ccusage) reads Claude Code and Codex logs (`~/.claude`,
+  `~/.codex`) and reports real token use and cost. It changes no client, so the card has **Enable** / **Disable**
+  instead of switches. **Enable** pins the latest npm release (`npx -y ccusage@<version> --version` downloads it
+  after a confirmation) and saves the pin in `ccusage.json` in the app's config dir; from then on the app runs
+  `npx -y ccusage@<version> daily --json --since <14 days ago>` in the background, at most every 10 minutes,
+  because each run re-reads every log for a few seconds of CPU. The card shows cost and tokens for the last 14
+  days, cache reads, today's cost and tokens per day. These are what you spent, not what the other tools saved;
+  compare days before and after turning a tool on. **Disable** stops the runs and forgets the pin.
+
 Each card also shows what the tool achieved, refreshed with the presence check:
 
 - **RTK:** tokens saved, average saving and commands filtered, plus tokens saved per day for the last 14 days,
@@ -248,7 +257,7 @@ Each card also shows what the tool achieved, refreshed with the presence check:
   and how many outputs it compressed, from `~/.claude/.chisle-compress-stats.json`.
 - **Serena, MarkItDown:** none; Serena keeps its tool-usage statistics only in a running server's dashboard.
 
-Version sources are PyPI (`headroom-ai`, `serena-agent`, `markitdown-mcp`), npm (`@upstash/context7-mcp`, `codebase-memory-mcp`), GitHub
+Version sources are PyPI (`headroom-ai`, `serena-agent`, `markitdown-mcp`), npm (`@upstash/context7-mcp`, `codebase-memory-mcp`, `ccusage`), GitHub
 Releases (`rtk-ai/rtk`), and
 the official Ponytail and Chisle plugin manifests. GitHub rate limits, an offline machine, or unsupported client CLI output can prevent a check;
 the error is shown without attempting an installation. After a partial native-command failure, review
@@ -336,6 +345,7 @@ options do not reach that headroom.
 | `~/.codex/config.toml` | `openai_base_url` and the comment line above it |
 | `~/.codex/config.toml.bak-ai-desktop-proxy` | One-time backup made before the first change |
 | `~/.config/ai-desktop-proxy/state.json` | App settings and what was written into each client |
+| `~/.config/ai-desktop-proxy/ccusage.json` | The ccusage release you enabled (only while ccusage is enabled) |
 | `~/.config/ai-desktop-proxy/tool-updates.json` | Latest known tool versions and update-check attempt times |
 | `~/.config/ai-desktop-proxy/tools/rtk` | App-managed RTK binary; a temporary `rtk.staging` file is used for verification |
 | `~/.local/bin/rtk` | Symlink to the app-managed RTK, created only when absent |

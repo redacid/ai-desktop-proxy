@@ -11,6 +11,8 @@ const ABOUT: Record<string, { what: string; url: string }> = {
     what: 'MCP server with language-server code tools: find symbols, references and edit by symbol, instead of reading whole files.' },
   context7: { url: 'https://context7.com',
     what: 'MCP server from Upstash that fetches current, version-specific documentation and code examples for libraries, so the agent does not rely on outdated training data.' },
+  ccusage: { url: 'https://github.com/ryoppippi/ccusage',
+    what: 'Reads Claude Code and Codex logs and reports real token use and cost per day, so you can see whether the other tools actually lower the bill.' },
   'codebase-memory': { url: 'https://github.com/DeusData/codebase-memory-mcp',
     what: 'MCP server that indexes the codebase into a local knowledge graph (code, config, infrastructure), so the agent can query call paths and impact instead of re-reading files.' },
   markitdown: { url: 'https://github.com/microsoft/markitdown',
@@ -103,7 +105,7 @@ export function Tools({ disabled, onBusy, onLogStart, headroom }: {
 
   const locked = disabled || busy !== null
   const version = (tool: ToolInfo): string =>
-    tool.installed === null ? 'unknown' : !tool.installed ? 'not installed' : tool.version ? `v${tool.version}` : 'installed'
+    tool.installed === null ? 'unknown' : !tool.installed ? (tool.id === 'ccusage' ? 'disabled' : 'not installed') : tool.version ? `v${tool.version}` : 'installed'
   const notes = (tool: ToolInfo): React.JSX.Element => <>
     {tool.blocked && <p className="note">{tool.blocked}</p>}
     {tool.error && <p className="error-inline">{tool.error}</p>}
@@ -212,7 +214,7 @@ export function Tools({ disabled, onBusy, onLogStart, headroom }: {
       {error && <p className="error-inline" role="alert">{error}</p>}
       {!tools.length && <p className="detail">Checking tools…</p>}
       <div className="tool-grid">
-        {tools.filter((t) => ['headroom', 'rtk', 'serena', 'markitdown', 'context7', 'codebase-memory'].includes(t.id)).map((tool) => (
+        {tools.filter((t) => ['headroom', 'rtk', 'serena', 'markitdown', 'context7', 'codebase-memory', 'ccusage'].includes(t.id)).map((tool) => (
           <article className="tool" key={tool.id} title={ABOUT[tool.id]?.what}>
             <div className="client-main">
               <Title name={tool.name} about={ABOUT[tool.id]} />
@@ -257,10 +259,14 @@ export function Tools({ disabled, onBusy, onLogStart, headroom }: {
             {notes(tool)}
             <div className="actions">
               {tool.installed === false && ['headroom', 'rtk'].includes(tool.id) && <button className="primary" disabled={locked || !!tool.blocked} onClick={() => void act(tool.id, 'install')}>Install</button>}
+              {tool.id === 'ccusage' && tool.installed === false && <button className="primary" disabled={locked || !!tool.blocked} onClick={() => void act(tool.id, 'install')}>Enable</button>}
               {updateButton(tool)}
             </div>
             {tool.installed === true && tool.connected && connectionRows(tool)}
-            {tool.id !== 'headroom' && tool.installed === true && lifecycle(tool.id, { stop: ours(tool), remove: !['context7', 'codebase-memory'].includes(tool.id) })}
+            {tool.id === 'ccusage' && tool.installed === true && (
+              <div className="actions lifecycle"><button disabled={locked} onClick={() => void act(tool.id, 'uninstall')}>Disable</button></div>
+            )}
+            {!['headroom', 'ccusage'].includes(tool.id) && tool.installed === true && lifecycle(tool.id, { stop: ours(tool), remove: !['context7', 'codebase-memory'].includes(tool.id) })}
             {checked(tool)}
           </article>
         ))}
