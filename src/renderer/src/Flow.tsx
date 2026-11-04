@@ -118,15 +118,19 @@ export function Flow({ flow, clients, providers, ports, children }: {
   // Node order: clients, proxy, headroom, providers.
   const nodes = useRef<(HTMLDivElement | null)[]>([])
   const packet = useRef<SVGGElement>(null)
-  const [geo, setGeo] = useState<Geometry | null>(null)
+  const [measured, setGeo] = useState<Geometry | null>(null)
   const n = clients.length
+  // A measurement taken before the client list arrived (or changed) describes other cards: wait for the next one.
+  const geo = measured && measured.clients.length === n && measured.providers.length === n ? measured : null
 
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
     const measure = (): void => {
+      const els = nodes.current.slice(0, 2 * n + 2)
+      if (els.length < 2 * n + 2 || els.some((e) => !e)) return // mid re-render; the next resize measures again
       const base = el.getBoundingClientRect()
-      const boxes = nodes.current.slice(0, 2 * n + 2).map((node) => {
+      const boxes = els.map((node) => {
         const r = node!.getBoundingClientRect()
         return { x: r.left - base.left, y: r.top - base.top, w: r.width, h: r.height }
       })
