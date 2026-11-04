@@ -1,75 +1,84 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { FlowState, Route } from './routes'
 
-/** Below this width the cards get too cramped in a row, so they stack instead. */
+/** Below this width the cards get too cramped in a row, so the diagram turns to run top to bottom. */
 const ROW_MIN = 940
 const SPEED = 0.15 // px per ms
 const DWELL_MS = 900 // time a request spends "inside" a card
 const MIN_LINE_MS = 1300 // short connectors still take long enough to follow
 const PAUSE_MS = 900 // between two requests
+/** How far into a client card its lane runs, and the space kept around the shared cards for the fallbacks. */
+const LANE = 56
 
 type Box = { x: number; y: number; w: number; h: number }
 type Pt = [number, number]
 type Kind = 'main' | 'bypass' | 'direct'
-type Track = { pts: Pt[]; kind: Kind; active: boolean; label?: { at: Pt; text: string } }
 /** A request's journey: lines it travels and cards it passes through, in order. */
 type Leg = { line: Pt[] } | { node: number; at: Pt }
 
-interface Geometry { width: number; height: number; row: boolean; clients: Box[]; proxy: Box; headroom: Box; provider: Box }
-interface Lines { toProxy: Pt[][]; direct: Pt[][]; proxyHeadroom: Pt[]; headroomProvider: Pt[]; bypass: Pt[]; labels: [Pt, Pt] | null }
-
-function layout(g: Geometry): Lines {
-  const { clients, proxy, headroom, provider, row, width } = g
-  if (row) {
-    // Clients are stacked in the first column; each joins the proxy's input, and goes down to the direct lane.
-    const bottom = Math.max(...[...clients, proxy, headroom, provider].map((b) => b.y + b.h))
-    const l1 = bottom + 22
-    const l2 = bottom + 50
-    const py = proxy.y + 28
-    const right = clients[0].x + clients[0].w
-    const join = right + (proxy.x - right) * 0.62
-    const drop = right + 14
-    const px = proxy.x + proxy.w / 2
-    const t1 = provider.x + provider.w * 0.38
-    const t2 = provider.x + provider.w * 0.68
-    const end = provider.y + provider.h + 3
-    return {
-      toProxy: clients.map((c) => [[c.x + c.w, c.y + 28], [join, c.y + 28], [join, py], [proxy.x - 3, py]]),
-      direct: clients.map((c) => [[c.x + c.w, c.y + c.h - 24], [drop, c.y + c.h - 24], [drop, l2], [t2, l2], [t2, end]]),
-      proxyHeadroom: [[proxy.x + proxy.w, py], [headroom.x - 3, py]],
-      headroomProvider: [[headroom.x + headroom.w, py], [provider.x - 3, py]],
-      bypass: [[px, proxy.y + proxy.h], [px, l1], [t1, l1], [t1, end]],
-      labels: [[(px + t1) / 2, l1 - 6], [(drop + t2) / 2, l2 - 6]]
-    }
-  }
-  // Clients side by side on top, the rest stacked below; fallbacks run in lanes on the right.
-  const lane1 = Math.min(Math.max(...[proxy, headroom, provider].map((b) => b.x + b.w)) + 18, width - 30)
-  const lane2 = Math.min(lane1 + 22, width - 8)
-  const end = provider.x + provider.w + 3
-  return {
-    toProxy: clients.map((c) => [[c.x + c.w * 0.3, c.y + c.h], [c.x + c.w * 0.3, proxy.y - 3]]),
-    direct: clients.map((c) => [[c.x + c.w * 0.75, c.y + c.h], [c.x + c.w * 0.75, c.y + c.h + 12], [lane2, c.y + c.h + 12],
-      [lane2, provider.y + 54], [end, provider.y + 54]]),
-    proxyHeadroom: [[proxy.x + 36, proxy.y + proxy.h], [proxy.x + 36, headroom.y - 3]],
-    headroomProvider: [[headroom.x + 36, headroom.y + headroom.h], [headroom.x + 36, provider.y - 3]],
-    bypass: [[proxy.x + proxy.w, proxy.y + 40], [lane1, proxy.y + 40], [lane1, provider.y + 30], [end, provider.y + 30]],
-    labels: null
-  }
+interface Geometry { width: number; height: number; row: boolean; clients: Box[]; proxy: Box; headroom: Box; providers: Box[] }
+/** One client's own paths. Lanes never share a line: each client talks only to its own provider. */
+interface Lane {
+  toProxy: Pt[]; toHeadroom: Pt[]; toProvider: Pt[]
+  bypass: Pt[] // mitmproxy straight to the provider while headroom is down
+  direct: Pt[] // the client straight to its provider, not through the proxy
+  port: Pt // where the listener port is written
+  y: number // the lane's line through the shared cards
 }
 
-const centre = (b: Box): Pt => [b.x + b.w / 2, b.y + b.h / 2]
+// The diagram is computed left to right; top to bottom is the same picture with x and y swapped.
+const swapBox = (b: Box): Box => ({ x: b.y, y: b.x, w: b.h, h: b.w })
+const swapPt = (p: Pt): Pt => [p[1], p[0]]
 
-/** The legs of one client's request: through every card it passes, along the lines between them. */
-function journey(i: number, route: Route, g: Geometry, l: Lines): Leg[] {
+function lanes(g: Geometry): Lane[] {
+  const t = g.row ? (b: Box): Box => b : swapBox
+  const proxy = t(g.proxy)
+  const headroom = t(g.headroom)
+  const pr = proxy.x + proxy.w
+  const hr = headroom.x + headroom.w
+  const out = g.clients.map((cb, i): Lane => {
+    const c = t(cb)
+    const p = t(g.providers[i])
+    const first = i === 0
+    // The first lane keeps to the top edge of the shared cards, the last to the bottom edge.
+    const sign = first ? -1 : 1
+    const y = first ? c.y + LANE : c.y + c.h - LANE
+    const edge = first ? proxy.y : proxy.y + proxy.h
+    const near = y + sign * 14 // bypass, just beside the main line
+    const bypassBand = edge + sign * 12
+    const directBand = edge + sign * 28
+    const directY = first ? c.y + 24 : c.y + c.h - 24
+    const cr = c.x + c.w
+    return {
+      y,
+      toProxy: [[cr, y], [proxy.x - 3, y]],
+      toHeadroom: [[pr, y], [headroom.x - 3, y]],
+      toProvider: [[hr, y], [p.x - 3, y]],
+      bypass: [[pr, near], [pr + 12, near], [pr + 12, bypassBand], [hr + 12, bypassBand], [hr + 12, near], [p.x - 3, near]],
+      direct: [[cr, directY], [cr + 10, directY], [cr + 10, directBand], [p.x - 10, directBand], [p.x - 10, directY], [p.x - 3, directY]],
+      port: [(cr + proxy.x) / 2, y - 6]
+    }
+  })
+  if (g.row) return out
+  const back = (pts: Pt[]): Pt[] => pts.map(swapPt)
+  return out.map((l) => ({ ...l, toProxy: back(l.toProxy), toHeadroom: back(l.toHeadroom), toProvider: back(l.toProvider),
+    bypass: back(l.bypass), direct: back(l.direct), port: [l.port[1] + 6, l.port[0] + 4] }))
+}
+
+/** The legs of one client's request: through every card it passes, along that client's own lines. */
+function journey(i: number, route: Route, g: Geometry, lane: Lane): Leg[] {
   const n = g.clients.length
-  const node = (k: number, b: Box): Leg => ({ node: k, at: centre(b) })
-  const start = node(i, g.clients[i])
+  // Inside a shared card the request stays on its own lane, so two clients never seem to meet.
+  const on = (b: Box): Pt => g.row ? [b.x + b.w / 2, lane.y] : [lane.y, b.y + b.h / 2]
+  const centre = (b: Box): Pt => [b.x + b.w / 2, b.y + b.h / 2]
+  const client = { node: i, at: centre(g.clients[i]) }
+  const provider = { node: n + 2 + i, at: centre(g.providers[i]) }
   if (route === 'compressed') {
-    return [start, { line: l.toProxy[i] }, node(n, g.proxy), { line: l.proxyHeadroom }, node(n + 1, g.headroom),
-      { line: l.headroomProvider }, node(n + 2, g.provider)]
+    return [client, { line: lane.toProxy }, { node: n, at: on(g.proxy) }, { line: lane.toHeadroom },
+      { node: n + 1, at: on(g.headroom) }, { line: lane.toProvider }, provider]
   }
-  if (route === 'uncompressed') return [start, { line: l.toProxy[i] }, node(n, g.proxy), { line: l.bypass }, node(n + 2, g.provider)]
-  return [start, { line: l.direct[i] }, node(n + 2, g.provider)]
+  if (route === 'uncompressed') return [client, { line: lane.toProxy }, { node: n, at: on(g.proxy) }, { line: lane.bypass }, provider]
+  return [client, { line: lane.direct }, provider]
 }
 
 const length = (pts: Pt[]): number => pts.slice(1).reduce((s, p, i) => s + Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]), 0)
@@ -89,18 +98,24 @@ const pathD = (pts: Pt[]): string => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0]} 
 const KIND: Record<Route, Kind> = { compressed: 'main', uncompressed: 'bypass', direct: 'direct', none: 'direct' }
 
 /**
- * Lays the cards out in request order, one card per client app, and animates requests through them: a dot labelled
- * with the client travels that client's route, the card it passes through lights up, and the fallbacks stay visible
- * as dashed lanes even when unused.
+ * The request path, one lane per client app: client → its mitmproxy listener → headroom → that client's provider,
+ * with the fallbacks (mitmproxy straight to the provider while headroom is down; the client going direct when it is
+ * not routed) drawn around the shared cards. A request labelled with its client travels the lane in use and lights up
+ * each card it passes through; clients take turns.
  */
-export function Flow({ flow, clients, children }: {
+export function Flow({ flow, clients, providers, ports, children }: {
   flow: FlowState
   /** One card per client app, in the order of `flow.routes`. */
   clients: React.ReactNode[]
-  children: [React.ReactNode, React.ReactNode, React.ReactNode]
+  /** Each client's provider card, in the same order. */
+  providers: React.ReactNode[]
+  /** Each client's mitmproxy listener, e.g. ":8877". */
+  ports: string[]
+  /** The shared cards: mitmproxy, headroom. */
+  children: [React.ReactNode, React.ReactNode]
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
-  // Client cards first, then proxy, headroom, provider.
+  // Node order: clients, proxy, headroom, providers.
   const nodes = useRef<(HTMLDivElement | null)[]>([])
   const packet = useRef<SVGGElement>(null)
   const [geo, setGeo] = useState<Geometry | null>(null)
@@ -111,13 +126,13 @@ export function Flow({ flow, clients, children }: {
     if (!el) return
     const measure = (): void => {
       const base = el.getBoundingClientRect()
-      const boxes = nodes.current.slice(0, n + 3).map((node) => {
+      const boxes = nodes.current.slice(0, 2 * n + 2).map((node) => {
         const r = node!.getBoundingClientRect()
         return { x: r.left - base.left, y: r.top - base.top, w: r.width, h: r.height }
       })
       setGeo((old) => {
         const next = { width: base.width, height: base.height, row: base.width >= ROW_MIN,
-          clients: boxes.slice(0, n), proxy: boxes[n], headroom: boxes[n + 1], provider: boxes[n + 2] }
+          clients: boxes.slice(0, n), proxy: boxes[n], headroom: boxes[n + 1], providers: boxes.slice(n + 2) }
         return JSON.stringify(old) === JSON.stringify(next) ? old : next
       })
     }
@@ -128,15 +143,14 @@ export function Flow({ flow, clients, children }: {
     return () => observer.disconnect()
   }, [n])
 
-  // One request at a time, taking turns between the clients that send any, so each client's path is shown.
   const plan = JSON.stringify(flow.routes.map((r) => r.route))
   useEffect(() => {
     const g = geo
     const dot = packet.current
     const senders = flow.routes.map((r, i) => ({ ...r, i })).filter((r) => r.route !== 'none')
     if (!g || !dot || !senders.length || matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const l = layout(g)
-    const trips = senders.map((s) => ({ name: s.name, kind: KIND[s.route], legs: journey(s.i, s.route, g, l) }))
+    const ls = lanes(g)
+    const trips = senders.map((s) => ({ name: s.name, kind: KIND[s.route], legs: journey(s.i, s.route, g, ls[s.i]) }))
     const label = dot.querySelector('text')!
     let trip = 0
     let start = performance.now()
@@ -184,53 +198,66 @@ export function Flow({ flow, clients, children }: {
   }, [geo, plan])
 
   const row = geo ? geo.row : true
-  const l = geo ? layout(geo) : null
-  const route = (i: number): Route => flow.routes[i]?.route ?? 'none'
-  const tracks: Track[] = l ? [
-    ...l.direct.map((pts, i): Track => ({ pts, kind: 'direct', active: route(i) === 'direct' })),
-    ...l.toProxy.map((pts, i): Track => ({ pts, kind: 'main', active: route(i) === 'compressed' || route(i) === 'uncompressed' })),
-    { pts: l.proxyHeadroom, kind: 'main', active: flow.main[1] },
-    { pts: l.headroomProvider, kind: 'main', active: flow.main[2] },
-    { pts: l.bypass, kind: 'bypass', active: flow.bypass,
-      label: l.labels ? { at: l.labels[0], text: 'headroom down: mitmproxy sends requests straight to the provider' } : undefined }
-  ] : []
-  if (l?.labels) tracks.push({ pts: [], kind: 'direct', active: flow.direct, label: { at: l.labels[1], text: 'not routed, or proxy down: the client goes direct' } })
+  const ls = geo ? lanes(geo) : []
+  const tracks = ls.flatMap((l, i) => {
+    const r = flow.routes[i]?.route ?? 'none'
+    const proxied = r === 'compressed' || r === 'uncompressed'
+    return [
+      { pts: l.direct, kind: 'direct' as Kind, active: r === 'direct' },
+      { pts: l.bypass, kind: 'bypass' as Kind, active: r === 'uncompressed' },
+      { pts: l.toProxy, kind: 'main' as Kind, active: proxied },
+      { pts: l.toHeadroom, kind: 'main' as Kind, active: r === 'compressed' },
+      { pts: l.toProvider, kind: 'main' as Kind, active: r === 'compressed' }
+    ]
+  })
+  // Explicit grid places: clients and their providers share a row (column when stacked), the shared cards span them.
+  const place = (line: number, span: boolean, track: number): React.CSSProperties => row
+    ? { gridColumn: line, gridRow: span ? `1 / span ${n}` : track }
+    : { gridRow: line, gridColumn: span ? `1 / span ${n}` : track }
   const node = (i: number) => (el: HTMLDivElement | null): void => { nodes.current[i] = el }
   return (
-    <div className={`flow ${row ? 'flow-row' : 'flow-column'}`} ref={ref}>
-      {geo && (
-        <svg className="flow-lines" width={geo.width} height={geo.height} aria-hidden="true">
-          <defs>
-            {(['main', 'bypass', 'direct'] as const).flatMap((k) => (['on', 'off'] as const).map((on) => (
-              <marker key={k + on} id={`flow-arrow-${k}-${on}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
-                <path d="M0 0L10 5L0 10z" className={`flow-head ${k} ${on}`} />
-              </marker>
-            )))}
-          </defs>
-          {/* Idle paths first, so the ones in use are drawn on top where lanes share a line. */}
-          {[...tracks.filter((t) => !t.active), ...tracks.filter((t) => t.active)].map((t, i) => (
-            <g key={i} className={`flow-path ${t.kind} ${t.active ? 'active' : 'idle'}`}>
-              {t.pts.length > 0 && <path d={pathD(t.pts)} className="track" markerEnd={`url(#flow-arrow-${t.kind}-${t.active ? 'on' : 'off'})`} />}
-              {t.active && t.pts.length > 0 && <path d={pathD(t.pts)} className="dots" />}
-              {t.label && <text x={t.label.at[0]} y={t.label.at[1]} textAnchor="middle">{t.label.text}</text>}
+    <>
+      <div className={`flow ${row ? 'flow-row' : 'flow-column'}`} ref={ref}>
+        {geo && (
+          <svg className="flow-lines" width={geo.width} height={geo.height} aria-hidden="true">
+            <defs>
+              {(['main', 'bypass', 'direct'] as const).flatMap((k) => (['on', 'off'] as const).map((on) => (
+                <marker key={k + on} id={`flow-arrow-${k}-${on}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0 0L10 5L0 10z" className={`flow-head ${k} ${on}`} />
+                </marker>
+              )))}
+            </defs>
+            {/* Idle paths first, so the ones in use are drawn on top. */}
+            {[...tracks.filter((t) => !t.active), ...tracks.filter((t) => t.active)].map((t, i) => (
+              <g key={i} className={`flow-path ${t.kind} ${t.active ? 'active' : 'idle'}`}>
+                <path d={pathD(t.pts)} className="track" markerEnd={`url(#flow-arrow-${t.kind}-${t.active ? 'on' : 'off'})`} />
+                {t.active && <path d={pathD(t.pts)} className="dots" />}
+              </g>
+            ))}
+            {ls.map((l, i) => (
+              <text key={i} className="flow-port" x={l.port[0]} y={l.port[1]} textAnchor="middle">{ports[i]}</text>
+            ))}
+          </svg>
+        )}
+        {clients.map((child, i) => <div key={`c${i}`} className="flow-node" style={place(1, false, i + 1)} ref={node(i)}>{child}</div>)}
+        {children.map((child, i) => <div key={`s${i}`} className="flow-node shared" style={place(i + 2, true, 1)} ref={node(n + i)}>{child}</div>)}
+        {providers.map((child, i) => <div key={`p${i}`} className="flow-node" style={place(4, false, i + 1)} ref={node(n + 2 + i)}>{child}</div>)}
+        {geo && (
+          // Above the cards so its label is never covered; hidden while the request is "inside" a card.
+          <svg className="flow-lines flow-top" width={geo.width} height={geo.height} aria-hidden="true">
+            <g ref={packet} className="flow-packet gone">
+              <circle r="10" className="halo" />
+              <circle r="5.5" className="core" />
+              <text y="-15" textAnchor="middle" />
             </g>
-          ))}
-        </svg>
-      )}
-      <div className="flow-clients">
-        {clients.map((child, i) => <div key={i} className="flow-node" ref={node(i)}>{child}</div>)}
+          </svg>
+        )}
       </div>
-      {children.map((child, i) => <div key={i} className="flow-node" ref={node(n + i)}>{child}</div>)}
-      {geo && (
-        // Above the cards so its label is never covered; hidden while the request is "inside" a card.
-        <svg className="flow-lines flow-top" width={geo.width} height={geo.height} aria-hidden="true">
-          <g ref={packet} className="flow-packet gone">
-            <circle r="10" className="halo" />
-            <circle r="5.5" className="core" />
-            <text y="-15" textAnchor="middle" />
-          </g>
-        </svg>
-      )}
-    </div>
+      <ul className="flow-legend">
+        <li className="main">through headroom, compressed</li>
+        <li className="bypass">headroom down: mitmproxy sends it straight to the provider</li>
+        <li className="direct">not routed, or proxy down: the client goes direct</li>
+      </ul>
+    </>
   )
 }

@@ -17,7 +17,7 @@ The window has four tabs:
 
 | Tab | What it holds |
 |---|---|
-| Overview | A card per client app (Claude Code, Codex), then Proxy, Compressor and AI provider, as the request path; its dot repeats the overall state |
+| Overview | The request path: a card per client app, the shared Proxy and Compressor, and each client's provider; its dot repeats the overall state |
 | Savings | headroom savings and recent requests |
 | Tools | Optional tools and their updates, see [Tools](tools.md) |
 | Settings | App and headroom settings |
@@ -44,45 +44,27 @@ closes by itself after a few seconds.
 
 ### Overview: the request path
 
-The Overview tab lays the cards out in the order a request travels: **client app (Claude Code, Codex) → Proxy
-(mitmproxy) → Compressor (headroom) → AI provider**. Each client app has its own card. Lines between the cards show the paths. An animated request, labelled with the client
-that sends it, travels the path that client uses right now: each card it passes through lights up in the colour of
-that path. With two clients on different paths they take turns. Paths not in use stay as faint dashes:
+The Overview tab draws the real request path, one lane per client app. The two clients never talk to each other;
+they only share the proxy service and headroom:
 
-| Path | When it is used |
+- **Claude Code** → mitmproxy on `:8877` (through `HTTPS_PROXY`) → headroom → **Anthropic** (`api.anthropic.com`)
+- **Codex** → mitmproxy's second listener on `:8878` (through `openai_base_url`) → headroom → **OpenAI**
+  (`api.openai.com`, or `chatgpt.com/backend-api/codex` with a ChatGPT login)
+
+Each lane also shows its two fallbacks, drawn around the shared cards (above them for Claude Code, below for Codex):
+
+| Line | When it is used |
 |---|---|
-| Client → Proxy → headroom → provider (green) | A routed client while the proxy and headroom both answer: requests are compressed |
-| Proxy → provider, below the cards (amber) | headroom does not answer: the proxy sends requests straight to the provider, uncompressed, and clients keep working |
-| Client → provider, along the bottom (grey) | A client that is not routed, or every client while the proxy is down (the app removes their proxy settings) |
+| Solid green, client → mitmproxy → headroom → provider | The client is routed and headroom answers: requests are compressed |
+| Amber, mitmproxy → provider, around headroom | headroom does not answer: mitmproxy sends that client's requests straight to its provider, uncompressed, and the client keeps working |
+| Grey, client → provider, around everything | The client is not routed, or the proxy is down (the app then removes its proxy settings) |
 
-The **AI provider** card lists, for each client, which provider it talks to and which path its requests take. The
-window opens wide enough for the diagram to run left to right where the screen allows; only in a narrower window do
-the cards stack, with the fallback paths along the right side. With reduced motion turned on in your desktop
-settings, the request does not move.
+An animated request, labelled with its client, travels the line that client uses right now; each card it passes
+through lights up in that line's colour. The clients take turns. Lines not in use stay as faint dashes, and a legend
+under the diagram names them. Each provider card says which path its client's requests take.
 
-### Proxy (mitmproxy)
-
-| Buttons you see | When | What they do |
-|---|---|---|
-| Install mitmproxy | mitmproxy is not installed | Asks, runs `uv tool install mitmproxy`, then sets up and starts the service |
-| Set up & start | installed, no service | Writes `ai-desktop-proxy.service` and starts it |
-| Apply | the service was written by an older app version, or settings changed | Rewrites and restarts the service |
-| Restart / Stop / Start | service exists | systemd actions. Stop first removes proxy settings from routed clients |
-| Remove | service exists | Removes client settings, then stops and deletes the service. mitmproxy stays installed |
-| Logs | service exists | The last 80 journal lines |
-
-If headroom is down while the proxy runs, the card says so: API requests then go straight to Anthropic (and Codex's to
-OpenAI or ChatGPT) without compression, and the clients keep working. The card also checks the second listener
-Codex uses and shows **Degraded** while only one of the two ports answers.
-
-### Compressor (headroom)
-
-If headroom already answers at the configured URL but was not started by this app (for example by Headroom
-Desktop), the card shows "run outside this app" and offers no buttons: the app never starts or stops it.
-
-Otherwise the card offers **Install headroom** (`uv tool install --python 3.13 "headroom-ai[all]"`, a few hundred
-MB), **Set up & start**, and the same Restart / Stop / Start / Remove / Logs as the proxy, for
-`ai-desktop-proxy-headroom.service`. The first start can take up to a minute.
+The window opens wide enough for the diagram to run left to right where the screen allows; in a narrower window the
+same diagram runs top to bottom. With reduced motion turned on in your desktop settings, the request does not move.
 
 ### Clients
 

@@ -111,8 +111,9 @@ it is defined there.
 
 The Overview's request-path diagram is renderer-only: `renderer/src/routes.ts` derives each client's route
 (compressed, uncompressed through the proxy, direct) from `AppStatus` and, with `clientTools`, which tools are active
-in each client from `ToolInfo`; and `Flow.tsx` draws the paths over the cards
-from their measured positions and animates one request at a time along each client's route (a `requestAnimationFrame`
+in each client from `ToolInfo`; and `Flow.tsx` draws one lane per client (client → its
+listener → headroom → its provider, with both fallbacks around the shared cards) over the cards from their measured
+positions and animates one request at a time along each client's route (a `requestAnimationFrame`
 loop that moves an SVG dot and toggles a `visiting` class on the cards; it stops while the window is hidden and with
 `prefers-reduced-motion`).
 

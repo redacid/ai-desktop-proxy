@@ -13,17 +13,18 @@ the app also follows your system's dark theme. Select a screenshot to open it at
 
 [![Overview tab: clients, proxy, headroom and the AI provider in request order, with the paths between them](images/overview.png)](images/overview.png)
 
-The cards follow a request from left to right: each client app, Proxy, Compressor (headroom), AI provider. An animated request
-travels the path each client uses now, lighting up the cards it passes through; the dashed lines below the cards are the fallbacks: proxy straight to the provider when
-headroom is down, and clients straight to the provider when they are not routed or the proxy is down. See
-[the request path](user-guide.md#overview-the-request-path).
+Each client app has its own lane, left to right: the client, its mitmproxy listener (`:8877` for Claude Code,
+`:8878` for Codex), headroom, and that client's provider (Anthropic or OpenAI). An animated request travels the lane
+each client uses now, lighting up the cards it passes through. The dashed lines around the shared cards are the
+fallbacks: mitmproxy straight to the provider when headroom is down, and the client straight to its provider when it
+is not routed or the proxy is down. See [the request path](user-guide.md#overview-the-request-path).
 
 | Area | What it tells you | What to do |
 |---|---|---|
 | Claude Code, Codex | Whether the client is routed through the proxy, and which tools are active in it (green) or not (grey) | Switch a client on, then start a new client session to use the settings |
 | Proxy (mitmproxy) | Whether the proxy is listening, and whether its service matches the current configuration | Install or set up on first use; Apply when outdated; Logs for diagnostics |
 | Compressor (headroom) | Whether headroom answers and whether this app manages it | Start the app-managed service; an external service is reported and left alone |
-| AI provider | Which provider each client talks to, and which path its requests take | Nothing; it follows the other cards |
+| Anthropic, OpenAI | Each client's provider, and which path that client's requests take | Nothing; it follows the other cards |
 | Restart / Stop / Remove | Controls for that service | Stop removes client routing before stopping the proxy. Remove also deletes the service unit |
 
 The proxy uses port **8877** for Claude Code and **8878** for Codex by default. headroom normally uses **6767**.

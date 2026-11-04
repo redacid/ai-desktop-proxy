@@ -208,10 +208,23 @@ button.danger { color: var(--down); border-color: color-mix(in srgb, var(--down)
 
 /* Overview: cards in request order, with the paths between them drawn on top. */
 .flow { position: relative; display: grid; gap: 16px; }
-.flow-row { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 0.85fr); column-gap: 56px; padding-bottom: 66px; }
-.flow-clients { display: grid; gap: 16px; align-content: start; min-width: 0; }
-.flow-column .flow-clients { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding-bottom: 14px; }
-.flow-column { grid-template-columns: minmax(0, 1fr); row-gap: 30px; padding-right: 64px; }
+/* Left to right: clients | mitmproxy | headroom | providers. The shared cards leave room around them for the fallbacks. */
+.flow-row { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 0.9fr); column-gap: 64px; row-gap: 16px; }
+.flow-row .flow-node.shared { margin: 44px 0; }
+/* Top to bottom: the same picture turned, for narrow windows. */
+.flow-column { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; row-gap: 64px; }
+.flow-column .flow-node.shared { margin: 0 44px; }
+.flow-port { font-size: 11px; font-family: ui-monospace, monospace; fill: var(--muted); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; }
+.provider .path { margin: 4px 0 0; }
+.provider .route { margin: 12px 0 0; padding-left: 10px; border-left: 3px solid var(--border); font-size: 13px; }
+.provider .route.compressed { border-color: var(--ok); }
+.provider .route.uncompressed { border-color: var(--degraded); }
+.provider .route.direct { border-color: var(--muted); }
+.flow-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 18px 0 0; padding: 0; font-size: 12px; color: var(--muted); }
+.flow-legend li::before { content: ''; display: inline-block; width: 26px; height: 0; margin-right: 8px; vertical-align: middle; border-top: 2.5px solid; }
+.flow-legend .main::before { border-color: var(--ok); }
+.flow-legend .bypass::before { border-color: var(--degraded); border-top-style: dashed; }
+.flow-legend .direct::before { border-color: var(--muted); border-top-style: dashed; }
 .flow-node { display: flex; min-width: 0; position: relative; z-index: 1; }
 .flow-node > .card { flex: 1; min-width: 0; transition: box-shadow 0.25s, border-color 0.25s; }
 .flow-node.visiting > .card { --glow: var(--ok); border-color: var(--glow); box-shadow: var(--shadow), 0 0 0 3px color-mix(in srgb, var(--glow) 22%, transparent), 0 0 22px color-mix(in srgb, var(--glow) 30%, transparent); }
@@ -233,16 +246,8 @@ button.danger { color: var(--down); border-color: color-mix(in srgb, var(--down)
 .flow-head.main.on { fill: var(--ok); }
 .flow-head.bypass.on { fill: var(--degraded); }
 .flow-head.direct.on { fill: var(--muted); }
-.flow-path text { font-size: 11px; fill: var(--muted); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; }
-.flow-path.idle text { opacity: 0.75; }
-.flow-path.bypass.active text { fill: var(--degraded); }
 @keyframes flow-dots { to { stroke-dashoffset: -12; } }
 @media (prefers-reduced-motion: reduce) { .flow-path .dots { animation: none; } }
-.provider .routes { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
-.provider .routes li { padding-left: 10px; border-left: 3px solid var(--border); }
-.provider .routes li.compressed { border-color: var(--ok); }
-.provider .routes li.uncompressed { border-color: var(--degraded); }
-.provider .routes li.direct { border-color: var(--muted); }
 
 /* Check now: progress while it runs, the result after. */
 .check-now { position: relative; }
@@ -259,8 +264,6 @@ button.danger { color: var(--down); border-color: color-mix(in srgb, var(--down)
 .check-result { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--border); font-size: 13px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .check-result.ok { color: var(--ok); }
 .check-result.warn { color: var(--degraded); }
-.provider header { margin-bottom: 8px; }
-.provider .detail { margin: 2px 0; }
 .flow-packet { transition: opacity 0.2s; }
 .flow-packet.gone { opacity: 0; }
 .flow-packet .core { fill: var(--ok); }

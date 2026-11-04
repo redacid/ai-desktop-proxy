@@ -14,7 +14,7 @@ import type {
 } from '@shared/ipc'
 import { CheckNow } from './CheckNow'
 import { Flow } from './Flow'
-import { clientKey, clientTools, flowState, ROUTE_LABEL } from './routes'
+import { clientKey, clientTools, flowState, PROVIDER_HOSTS, ROUTE_LABEL } from './routes'
 import { HeadroomSettings } from './HeadroomSettings'
 import { RecentRequests } from './RecentRequests'
 import { Tools } from './Tools'
@@ -394,9 +394,18 @@ export function App(): React.JSX.Element {
         <SettingsPanel onSaved={setStatus} headroomExternal={status.compressorInfo?.managed === 'external'} />
       )}
       {tab === 'overview' && <>
-        <Flow flow={flow} clients={status.clientList.map((c) => (
-          <Client key={c.id} client={c} tools={tools} busy={busy || toolBusy || busyAction !== null} onToggle={(on) => void toggle(c.id, on)} />
-        ))}>
+        <Flow flow={flow}
+          clients={status.clientList.map((c) => (
+            <Client key={c.id} client={c} tools={tools} busy={busy || toolBusy || busyAction !== null} onToggle={(on) => void toggle(c.id, on)} />
+          ))}
+          ports={status.clientList.map((c) => `:${c.id === 'codex' ? status.proxyInfo?.codexPort ?? '' : status.proxyInfo?.port ?? ''}`)}
+          providers={flow.routes.map((r) => (
+            <section key={r.id} className="card provider">
+              <header><h2>{r.provider}</h2></header>
+              {PROVIDER_HOSTS[r.provider]?.map((h) => <p key={h} className="path">{h}</p>)}
+              <p className={`route ${r.route}`}><strong>{r.name}</strong>: {ROUTE_LABEL[r.route]}</p>
+            </section>
+          ))}>
           <Card title="Proxy (mitmproxy)" status={status.proxy}>
             {status.proxyInfo && (
               <ServiceControls
@@ -422,16 +431,6 @@ export function App(): React.JSX.Element {
               />
             )}
           </Card>
-          <section className="card provider">
-            <header><h2>AI provider</h2></header>
-            <p className="detail">Anthropic: api.anthropic.com</p>
-            <p className="detail">OpenAI: api.openai.com, chatgpt.com</p>
-            <ul className="routes">
-              {flow.routes.filter((r) => r.route !== 'none').map((r) => (
-                <li key={r.id} className={r.route}><strong>{r.name}</strong> → {r.provider}: {ROUTE_LABEL[r.route]}</li>
-              ))}
-            </ul>
-          </section>
         </Flow>
       </>}
       {/* Kept mounted so a running tool action and its state survive switching tabs. */}

@@ -18,6 +18,11 @@ export interface FlowState {
 }
 
 const PROVIDER: Record<string, string> = { 'claude-code': 'Anthropic', codex: 'OpenAI' }
+/** Where each provider's API requests go (Codex with a ChatGPT login uses the ChatGPT backend). */
+export const PROVIDER_HOSTS: Record<string, string[]> = {
+  Anthropic: ['api.anthropic.com'],
+  OpenAI: ['api.openai.com', 'chatgpt.com/backend-api/codex']
+}
 
 export function routeOf(client: ClientInfo, proxyUp: boolean, headroomUp: boolean): Route {
   if (client.state === 'missing') return 'none'
