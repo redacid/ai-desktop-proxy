@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { AppStatus, ClientInfo, ComponentStatus } from '@shared/ipc'
-import { flowState } from './routes'
+import type { AppStatus, ClientInfo, ComponentStatus, ToolInfo } from '@shared/ipc'
+import { clientTools, flowState } from './routes'
 
 const client = (id: string, patch: Partial<ClientInfo> = {}): ClientInfo => ({
   id, name: id, configPath: '/x', enabled: true, state: 'applied', detail: '', checkedAt: '', ...patch
@@ -28,5 +28,23 @@ describe('flowState', () => {
     const f = flowState(status(true, 'ok', [client('codex', { enabled: false, state: 'missing' })]))
     expect(f).toMatchObject({ main: [false, false, false], bypass: false, direct: false })
     expect(f.routes[0].route).toBe('none')
+  })
+})
+
+describe('clientTools', () => {
+  const tool = (id: string, patch: Partial<ToolInfo> = {}): ToolInfo => ({ id, name: id, installed: true, version: null, latest: null,
+    updateAvailable: false, checkedAt: null, error: null, blocked: null, detail: '', stats: null, ...patch } as ToolInfo)
+  const tools = [
+    tool('rtk', { connected: { claude: true, codex: false } }),
+    tool('ponytail-claude', { enabled: true }), tool('ponytail-codex', { enabled: false }),
+    tool('chisle-claude', { installed: false }), tool('caveman-claude', { installed: null }),
+    tool('serena', { connected: { claude: false, codex: false }, foreign: { claude: true, codex: false } }),
+    tool('context7', { connected: { claude: true, codex: true } })
+  ]
+  it('marks what is active in each client', () => {
+    const chips = (c: 'claude' | 'codex'): Record<string, boolean | null> => Object.fromEntries(clientTools(tools, c).map((t) => [t.name, t.active]))
+    expect(chips('claude')).toEqual({ RTK: true, Ponytail: true, Chisle: false, Caveman: null, Serena: true, MarkItDown: null, Context7: true, 'Codebase Memory': null })
+    expect(chips('codex')).toEqual({ RTK: false, Ponytail: false, Serena: false, MarkItDown: null, Context7: true, 'Codebase Memory': null })
+    expect(clientTools(tools, 'codex').find((t) => t.name === 'Ponytail')?.title).toBe('Ponytail: installed, disabled')
   })
 })

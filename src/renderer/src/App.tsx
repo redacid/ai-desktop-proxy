@@ -9,11 +9,12 @@ import type {
   CompressorStats,
   ProxyAction,
   ProxyInfo,
+  ToolInfo,
   UserSettings
 } from '@shared/ipc'
 import { CheckNow } from './CheckNow'
 import { Flow } from './Flow'
-import { flowState, ROUTE_LABEL } from './routes'
+import { clientKey, clientTools, flowState, ROUTE_LABEL } from './routes'
 import { HeadroomSettings } from './HeadroomSettings'
 import { RecentRequests } from './RecentRequests'
 import { Tools } from './Tools'
@@ -49,16 +50,23 @@ function Card({ title, status, children }: {
   )
 }
 
-function Client({ client, busy, onToggle }: {
+/** One card per client app: its routing switch and which token-saving tools are active in it. */
+function Client({ client, tools, busy, onToggle }: {
   client: ClientInfo
+  tools: ToolInfo[]
   busy: boolean
   onToggle: (enabled: boolean) => void
 }): React.JSX.Element {
   const ok = !client.enabled || client.state === 'applied'
+  const health = client.state === 'missing' ? 'unknown' : !client.enabled ? 'unknown'
+    : client.state === 'applied' ? 'ok' : client.state === 'error' || client.state === 'conflict' ? 'down' : 'degraded'
+  const key = clientKey(client.id)
+  const chips = key ? clientTools(tools, key) : []
   return (
-    <li className="client">
-      <div className="client-main">
-        <strong>{client.name}</strong>
+    <section className="card client-card">
+      <header>
+        <span className={`dot ${health}`} />
+        <h2>{client.name}</h2>
         <span className={`badge ${ok ? '' : 'warn'}`}>{stateLabel[client.state]}</span>
         <label className="switch" title={client.enabled ? 'Stop routing' : 'Route through the proxy'}>
           <input
@@ -69,10 +77,17 @@ function Client({ client, busy, onToggle }: {
           />
           <span />
         </label>
-      </div>
+      </header>
       <p className="detail">{client.detail}</p>
       <p className="path">{client.configPath}</p>
-    </li>
+      {client.state !== 'missing' && chips.length > 0 && (
+        <ul className="tool-chips" aria-label={`Tools in ${client.name}`}>
+          {chips.map((c) => (
+            <li key={c.name} className={c.active ? 'on' : c.active === false ? 'off' : 'unknown'} title={c.title}>{c.name}</li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 
@@ -293,13 +308,17 @@ export function App(): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('overview')
   const [installLog, setInstallLog] = useState<string[]>([])
   const [toolBusy, setToolBusy] = useState(false)
+  const [tools, setTools] = useState<ToolInfo[]>([])
 
   useEffect(() => {
     void window.api.getStatus().then(setStatus)
     const offStatus = window.api.onStatus(setStatus)
+    const offTools = window.api.onTools(setTools)
+    void window.api.getTools().then(setTools).catch(() => {})
     const offLog = window.api.onInstallLog((line) => setInstallLog((l) => [...l.slice(-200), line]))
     return () => {
       offStatus()
+      offTools()
       offLog()
     }
   }, [])
@@ -375,14 +394,9 @@ export function App(): React.JSX.Element {
         <SettingsPanel onSaved={setStatus} headroomExternal={status.compressorInfo?.managed === 'external'} />
       )}
       {tab === 'overview' && <>
-        <Flow flow={flow}>
-          <Card title="Clients" status={status.clients}>
-            <ul className="clients">
-              {status.clientList.map((c) => (
-                <Client key={c.id} client={c} busy={busy || toolBusy || busyAction !== null} onToggle={(on) => void toggle(c.id, on)} />
-              ))}
-            </ul>
-          </Card>
+        <Flow flow={flow} clients={status.clientList.map((c) => (
+          <Client key={c.id} client={c} tools={tools} busy={busy || toolBusy || busyAction !== null} onToggle={(on) => void toggle(c.id, on)} />
+        ))}>
           <Card title="Proxy (mitmproxy)" status={status.proxy}>
             {status.proxyInfo && (
               <ServiceControls

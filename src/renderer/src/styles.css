@@ -208,8 +208,10 @@ button.danger { color: var(--down); border-color: color-mix(in srgb, var(--down)
 
 /* Overview: cards in request order, with the paths between them drawn on top. */
 .flow { position: relative; display: grid; gap: 16px; }
-.flow-row { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 0.85fr); column-gap: 52px; padding-bottom: 66px; }
-.flow-column { grid-template-columns: minmax(0, 1fr); row-gap: 30px; padding-right: 54px; }
+.flow-row { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 0.85fr); column-gap: 56px; padding-bottom: 66px; }
+.flow-clients { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.flow-column .flow-clients { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding-bottom: 14px; }
+.flow-column { grid-template-columns: minmax(0, 1fr); row-gap: 30px; padding-right: 64px; }
 .flow-node { display: flex; min-width: 0; position: relative; z-index: 1; }
 .flow-node > .card { flex: 1; min-width: 0; transition: box-shadow 0.25s, border-color 0.25s; }
 .flow-node.visiting > .card { --glow: var(--ok); border-color: var(--glow); box-shadow: var(--shadow), 0 0 0 3px color-mix(in srgb, var(--glow) 22%, transparent), 0 0 22px color-mix(in srgb, var(--glow) 30%, transparent); }
@@ -269,3 +271,11 @@ button.danger { color: var(--down); border-color: color-mix(in srgb, var(--down)
 .flow-packet.direct .halo { fill: color-mix(in srgb, var(--muted) 30%, transparent); }
 .flow-packet text { font-size: 11px; font-weight: 600; fill: var(--text); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; }
 @keyframes packet-pulse { from { transform: scale(0.8); } to { transform: scale(1.25); } }
+.client-card header { flex-wrap: wrap; }
+.client-card header h2 { flex: 1; }
+.client-card .detail { margin-top: 8px; }
+.tool-chips { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+.tool-chips li { font-size: 11px; line-height: 1; padding: 4px 7px; border-radius: 5px; border: 1px solid transparent; cursor: default; }
+.tool-chips li.on { background: var(--ok); color: #fff; }
+.tool-chips li.off { background: color-mix(in srgb, var(--unknown) 18%, var(--card)); color: var(--muted); border-color: color-mix(in srgb, var(--unknown) 30%, transparent); }
+.tool-chips li.unknown { background: none; color: var(--muted); border-color: var(--border); border-style: dashed; }

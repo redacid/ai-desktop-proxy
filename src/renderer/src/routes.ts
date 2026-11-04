@@ -3,7 +3,7 @@
  * fallback straight from mitmproxy to the provider while headroom is down, and the direct path of clients that are
  * not routed (or whose settings the app removed because the proxy is down). Pure, so it is unit tested.
  */
-import type { AppStatus, ClientInfo } from '@shared/ipc'
+import type { AppStatus, ClientInfo, ToolInfo } from '@shared/ipc'
 
 export type Route = 'compressed' | 'uncompressed' | 'direct' | 'none'
 
@@ -47,4 +47,36 @@ export const ROUTE_LABEL: Record<Route, string> = {
   uncompressed: 'through the proxy, uncompressed: headroom is down',
   direct: 'direct, not through the proxy',
   none: 'not installed'
+}
+
+export type ClientKey = 'claude' | 'codex'
+export const clientKey = (id: string): ClientKey | null => id === 'claude-code' ? 'claude' : id === 'codex' ? 'codex' : null
+
+/** Per-client tools. Plugins have one entry per client; the others report per client whether they are connected. */
+const TOOLS: { name: string; id: (c: ClientKey) => string; plugin: boolean; clients: ClientKey[] }[] = [
+  { name: 'RTK', id: () => 'rtk', plugin: false, clients: ['claude', 'codex'] },
+  { name: 'Ponytail', id: (c) => `ponytail-${c}`, plugin: true, clients: ['claude', 'codex'] },
+  { name: 'Chisle', id: () => 'chisle-claude', plugin: true, clients: ['claude'] },
+  { name: 'Caveman', id: () => 'caveman-claude', plugin: true, clients: ['claude'] },
+  { name: 'Serena', id: () => 'serena', plugin: false, clients: ['claude', 'codex'] },
+  { name: 'MarkItDown', id: () => 'markitdown', plugin: false, clients: ['claude', 'codex'] },
+  { name: 'Context7', id: () => 'context7', plugin: false, clients: ['claude', 'codex'] },
+  { name: 'Codebase Memory', id: () => 'codebase-memory', plugin: false, clients: ['claude', 'codex'] }
+]
+
+export interface ToolChip { name: string; active: boolean | null; title: string }
+
+/** The tools that can work in this client, and whether each is active there (null = could not tell). */
+export function clientTools(tools: ToolInfo[], client: ClientKey): ToolChip[] {
+  return TOOLS.filter((t) => t.clients.includes(client)).map((t): ToolChip => {
+    const tool = tools.find((x) => x.id === t.id(client))
+    if (!tool || tool.installed === null) return { name: t.name, active: null, title: `${t.name}: not checked yet` }
+    if (t.plugin) {
+      const active = tool.installed && tool.enabled !== false
+      return { name: t.name, active, title: `${t.name}: ${!tool.installed ? 'not installed' : active ? 'enabled' : 'installed, disabled'}` }
+    }
+    if (tool.foreign?.[client]) return { name: t.name, active: true, title: `${t.name}: set up outside this app` }
+    const connected = tool.installed ? tool.connected?.[client] ?? null : false
+    return { name: t.name, active: connected, title: `${t.name}: ${connected === null ? 'unknown' : connected ? 'connected' : 'not connected'}` }
+  })
 }

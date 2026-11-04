@@ -17,7 +17,7 @@ The window has four tabs:
 
 | Tab | What it holds |
 |---|---|
-| Overview | Proxy, Compressor and Clients cards; its dot repeats the overall state |
+| Overview | A card per client app (Claude Code, Codex), then Proxy, Compressor and AI provider, as the request path; its dot repeats the overall state |
 | Savings | headroom savings and recent requests |
 | Tools | Optional tools and their updates, see [Tools](tools.md) |
 | Settings | App and headroom settings |
@@ -44,16 +44,16 @@ closes by itself after a few seconds.
 
 ### Overview: the request path
 
-The Overview tab lays the cards out in the order a request travels: **Clients → Proxy (mitmproxy) → Compressor
-(headroom) → AI provider**. Lines between the cards show the paths. An animated request, labelled with the client
+The Overview tab lays the cards out in the order a request travels: **client app (Claude Code, Codex) → Proxy
+(mitmproxy) → Compressor (headroom) → AI provider**. Each client app has its own card. Lines between the cards show the paths. An animated request, labelled with the client
 that sends it, travels the path that client uses right now: each card it passes through lights up in the colour of
 that path. With two clients on different paths they take turns. Paths not in use stay as faint dashes:
 
 | Path | When it is used |
 |---|---|
-| Clients → Proxy → headroom → provider (green) | A routed client while the proxy and headroom both answer: requests are compressed |
+| Client → Proxy → headroom → provider (green) | A routed client while the proxy and headroom both answer: requests are compressed |
 | Proxy → provider, below the cards (amber) | headroom does not answer: the proxy sends requests straight to the provider, uncompressed, and clients keep working |
-| Clients → provider, along the bottom (grey) | A client that is not routed, or every client while the proxy is down (the app removes their proxy settings) |
+| Client → provider, along the bottom (grey) | A client that is not routed, or every client while the proxy is down (the app removes their proxy settings) |
 
 The **AI provider** card lists, for each client, which provider it talks to and which path its requests take. The
 window opens wide enough for the diagram to run left to right where the screen allows; only in a narrower window do
@@ -85,6 +85,11 @@ MB), **Set up & start**, and the same Restart / Stop / Start / Remove / Logs as 
 `ai-desktop-proxy-headroom.service`. The first start can take up to a minute.
 
 ### Clients
+
+Each client app card shows, below its routing switch, the token-saving tools that can work in that client:
+**green** blocks are active there (connected, or a plugin installed and enabled), **grey** ones are not, and a dashed
+outline means the app could not tell yet. Hover a block for its state. Tools you set up outside the app count as
+active. Connect or disconnect them on the [Tools](tools.md) tab.
 
 Each supported client has a switch. On writes the proxy settings into the client config; off removes exactly
 what the app wrote. The badge shows what the config contains:
