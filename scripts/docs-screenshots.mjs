@@ -17,7 +17,7 @@ else {
 }
 const browser = await playwright.chromium.launch({ headless: true })
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: 'light', locale: 'en-GB', timezoneId: 'UTC', deviceScaleFactor: 1 })
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: 'light', reducedMotion: 'reduce', locale: 'en-GB', timezoneId: 'UTC', deviceScaleFactor: 1 })
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
   await page.route('**/*', async (route) => {
@@ -34,7 +34,7 @@ try {
     window.api = {
       getStatus: async () => data.status, refreshStatus: async () => data.status,
       getTools: async () => data.tools, checkTools: async () => data.tools, getSettings: async () => data.settings,
-      getUpdate: async () => data.update, onUpdate: off, onStatus: off, onTools: off, onInstallLog: off,
+      getUpdate: async () => data.update, onUpdate: off, onStatus: off, onCheckProgress: off, onTools: off, onInstallLog: off,
       setClientEnabled: readOnly, toolAction: readOnly, proxyAction: readOnly, compressorAction: readOnly,
       saveSettings: readOnly, updateAction: readOnly, updatePreferences: readOnly,
       proxyLogs: async () => '', compressorLogs: async () => '',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ClientInfo } from '@shared/ipc'
-import { clientsStatus, overallHealth, proxyStatus } from './status'
+import type { CheckProgress, ClientInfo, CompressorStats, ProxyInfo } from '@shared/ipc'
+import { clientsStatus, overallHealth, proxyStatus, StatusMonitor } from './status'
 
 describe('overallHealth', () => {
   it('is down when any part is down', () => {
@@ -46,5 +46,31 @@ describe('proxyStatus', () => {
     expect(proxyStatus({ ...info, listening: false, mitmdump: null }).detail).toMatch(/not installed/)
     expect(proxyStatus({ ...info, listening: false, unit: 'missing' }).detail).toMatch(/not set up/)
     expect(proxyStatus({ ...info, listening: false, active: false }).detail).toMatch(/stopped/)
+  })
+})
+
+describe('StatusMonitor.refresh progress', () => {
+  const sources = (headroom: 'ok' | 'down', stats: () => Promise<CompressorStats>) => new StatusMonitor({
+    proxyInfo: async () => ({ listening: true } as ProxyInfo),
+    proxy: async () => ({ health: 'ok', detail: 'listening' }),
+    compressorInfo: async () => ({ local: true } as never),
+    compressor: async () => ({ health: headroom, detail: headroom }),
+    stats,
+    clients: async () => []
+  })
+  it('reports each component as it is checked', async () => {
+    const steps: CheckProgress[] = []
+    await sources('ok', async () => ({ recent: [1, 2] } as unknown as CompressorStats)).refresh((p) => steps.push(p))
+    expect(steps.filter((p) => p.state === 'done').map((p) => [p.step, p.health])).toEqual(expect.arrayContaining([
+      ['proxy', 'ok'], ['compressor', 'ok'], ['stats', 'ok']]))
+    expect(steps.find((p) => p.step === 'stats' && p.state === 'done')?.detail).toBe('2 recent requests')
+  })
+  it('skips statistics while headroom is down, and says why stats failed', async () => {
+    const steps: CheckProgress[] = []
+    await sources('down', async () => { throw new Error('x') }).refresh((p) => steps.push(p))
+    expect(steps.at(-1)).toEqual({ step: 'stats', state: 'skipped', detail: 'headroom is not answering' })
+    const failed: CheckProgress[] = []
+    await sources('ok', async () => { throw new Error('x') }).refresh((p) => failed.push(p))
+    expect(failed.at(-1)).toMatchObject({ step: 'stats', health: 'degraded' })
   })
 })
