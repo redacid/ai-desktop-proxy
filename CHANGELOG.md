@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.6 — 2026-11-04
+
+Changes since 0.2.5.
+
+- Show the request path on Overview, with progress for Check now (#9) (8fa0106)
+
 ## 0.2.5 — 2026-11-02
 
 Changes since 0.2.4.
