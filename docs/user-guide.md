@@ -45,8 +45,9 @@ closes by itself after a few seconds.
 ### Overview: the request path
 
 The Overview tab lays the cards out in the order a request travels: **Clients → Proxy (mitmproxy) → Compressor
-(headroom) → AI provider**. Lines between the cards show the paths; moving dots mark the ones in use right now, and
-paths not in use stay as faint dashes:
+(headroom) → AI provider**. Lines between the cards show the paths. An animated request, labelled with the client
+that sends it, travels the path that client uses right now: each card it passes through lights up in the colour of
+that path. With two clients on different paths they take turns. Paths not in use stay as faint dashes:
 
 | Path | When it is used |
 |---|---|
@@ -54,8 +55,10 @@ paths not in use stay as faint dashes:
 | Proxy → provider, below the cards (amber) | headroom does not answer: the proxy sends requests straight to the provider, uncompressed, and clients keep working |
 | Clients → provider, along the bottom (grey) | A client that is not routed, or every client while the proxy is down (the app removes their proxy settings) |
 
-The **AI provider** card lists, for each client, which provider it talks to and which path its requests take. In a
-narrow window the cards stack and the fallback paths run along the right side.
+The **AI provider** card lists, for each client, which provider it talks to and which path its requests take. The
+window opens wide enough for the diagram to run left to right where the screen allows; only in a narrower window do
+the cards stack, with the fallback paths along the right side. With reduced motion turned on in your desktop
+settings, the request does not move.
 
 ### Proxy (mitmproxy)
 

@@ -1,11 +1,13 @@
 import { join } from 'node:path'
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow, screen, shell } from 'electron'
 import { resourcePath } from './paths'
 
 export function createMainWindow(isQuitting: () => boolean): BrowserWindow {
+  // Wide enough for the Overview diagram in one row, where the screen allows it.
+  const area = screen.getPrimaryDisplay().workAreaSize
   const win = new BrowserWindow({
-    width: 900,
-    height: 640,
+    width: Math.min(1180, area.width - 40),
+    height: Math.min(760, area.height - 40),
     minWidth: 640,
     minHeight: 480,
     show: false,

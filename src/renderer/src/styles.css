@@ -208,18 +208,22 @@ button.danger { color: var(--down); border-color: color-mix(in srgb, var(--down)
 
 /* Overview: cards in request order, with the paths between them drawn on top. */
 .flow { position: relative; display: grid; gap: 16px; }
-.flow-row { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 0.85fr); column-gap: 56px; padding-bottom: 66px; }
+.flow-row { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 0.85fr); column-gap: 52px; padding-bottom: 66px; }
 .flow-column { grid-template-columns: minmax(0, 1fr); row-gap: 30px; padding-right: 54px; }
-.flow-node { display: flex; min-width: 0; }
-.flow-node > .card { flex: 1; min-width: 0; }
-.flow-lines { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.flow-node { display: flex; min-width: 0; position: relative; z-index: 1; }
+.flow-node > .card { flex: 1; min-width: 0; transition: box-shadow 0.25s, border-color 0.25s; }
+.flow-node.visiting > .card { --glow: var(--ok); border-color: var(--glow); box-shadow: var(--shadow), 0 0 0 3px color-mix(in srgb, var(--glow) 22%, transparent), 0 0 22px color-mix(in srgb, var(--glow) 30%, transparent); }
+.flow-node.visiting.bypass > .card { --glow: var(--degraded); }
+.flow-node.visiting.direct > .card { --glow: var(--muted); }
+.flow-lines.flow-top { z-index: 2; }
+.flow-lines { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: visible; }
 .flow-path .track { fill: none; stroke-width: 2; stroke-linejoin: round; }
 .flow-path.idle .track { stroke: var(--border); stroke-dasharray: 4 5; }
 .flow-path.active .track { stroke-width: 2.5; }
 .flow-path.main.active .track { stroke: color-mix(in srgb, var(--ok) 35%, transparent); }
 .flow-path.bypass.active .track { stroke: color-mix(in srgb, var(--degraded) 40%, transparent); }
 .flow-path.direct.active .track { stroke: color-mix(in srgb, var(--muted) 40%, transparent); }
-.flow-path .dots { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 0 12; animation: flow-dots 0.8s linear infinite; }
+.flow-path .dots { fill: none; opacity: 0.55; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 0 12; animation: flow-dots 0.8s linear infinite; }
 .flow-path.main .dots { stroke: var(--ok); }
 .flow-path.bypass .dots { stroke: var(--degraded); }
 .flow-path.direct .dots { stroke: var(--muted); }
@@ -255,3 +259,13 @@ button.danger { color: var(--down); border-color: color-mix(in srgb, var(--down)
 .check-result.warn { color: var(--degraded); }
 .provider header { margin-bottom: 8px; }
 .provider .detail { margin: 2px 0; }
+.flow-packet { transition: opacity 0.2s; }
+.flow-packet.gone { opacity: 0; }
+.flow-packet .core { fill: var(--ok); }
+.flow-packet .halo { fill: color-mix(in srgb, var(--ok) 28%, transparent); animation: packet-pulse 0.9s ease-in-out infinite alternate; }
+.flow-packet.bypass .core { fill: var(--degraded); }
+.flow-packet.bypass .halo { fill: color-mix(in srgb, var(--degraded) 30%, transparent); }
+.flow-packet.direct .core { fill: var(--muted); }
+.flow-packet.direct .halo { fill: color-mix(in srgb, var(--muted) 30%, transparent); }
+.flow-packet text { font-size: 11px; font-weight: 600; fill: var(--text); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; }
+@keyframes packet-pulse { from { transform: scale(0.8); } to { transform: scale(1.25); } }

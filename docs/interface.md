@@ -13,8 +13,8 @@ the app also follows your system's dark theme. Select a screenshot to open it at
 
 [![Overview tab: clients, proxy, headroom and the AI provider in request order, with the paths between them](images/overview.png)](images/overview.png)
 
-The cards follow a request from left to right: Clients, Proxy, Compressor (headroom), AI provider. Moving dots show
-the paths in use now; the dashed lines below the cards are the fallbacks: proxy straight to the provider when
+The cards follow a request from left to right: Clients, Proxy, Compressor (headroom), AI provider. An animated request
+travels the path each client uses now, lighting up the cards it passes through; the dashed lines below the cards are the fallbacks: proxy straight to the provider when
 headroom is down, and clients straight to the provider when they are not routed or the proxy is down. See
 [the request path](user-guide.md#overview-the-request-path).
 

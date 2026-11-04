@@ -17,7 +17,7 @@ else {
 }
 const browser = await playwright.chromium.launch({ headless: true })
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: 'light', locale: 'en-GB', timezoneId: 'UTC', deviceScaleFactor: 1 })
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: 'light', reducedMotion: 'reduce', locale: 'en-GB', timezoneId: 'UTC', deviceScaleFactor: 1 })
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
   await page.route('**/*', async (route) => {

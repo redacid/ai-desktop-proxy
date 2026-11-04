@@ -111,7 +111,9 @@ it is defined there.
 
 The Overview's request-path diagram is renderer-only: `renderer/src/routes.ts` derives each client's route
 (compressed, uncompressed through the proxy, direct) from `AppStatus`, and `Flow.tsx` draws the paths over the cards
-from their measured positions.
+from their measured positions and animates one request at a time along each client's route (a `requestAnimationFrame`
+loop that moves an SVG dot and toggles a `visiting` class on the cards; it stops while the window is hidden and with
+`prefers-reduced-motion`).
 
 Recent requests travel with `AppStatus.stats.recent` as metrics only; bodies are fetched on demand through
 `compressor:request-detail`, because they can be large and are only kept when headroom runs with `--log-messages`.
