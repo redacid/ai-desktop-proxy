@@ -34,7 +34,7 @@ try {
     window.api = {
       getStatus: async () => data.status, refreshStatus: async () => data.status,
       getTools: async () => data.tools, checkTools: async () => data.tools, getSettings: async () => data.settings,
-      getUpdate: async () => data.update, onUpdate: off, onStatus: off, onTools: off, onInstallLog: off,
+      getUpdate: async () => data.update, onUpdate: off, onStatus: off, onCheckProgress: off, onTools: off, onInstallLog: off,
       setClientEnabled: readOnly, toolAction: readOnly, proxyAction: readOnly, compressorAction: readOnly,
       saveSettings: readOnly, updateAction: readOnly, updatePreferences: readOnly,
       proxyLogs: async () => '', compressorLogs: async () => '',

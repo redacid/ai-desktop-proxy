@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import type { AppStatus, ClientInfo, ComponentStatus, CompressorInfo, CompressorStats, Health, ProxyInfo } from '@shared/ipc'
+import type { AppStatus, CheckProgress, ClientInfo, ComponentStatus, CompressorInfo, CompressorStats, Health, ProxyInfo } from '@shared/ipc'
 
 /** Combines component health: any down -> down, all ok -> ok, all unknown -> unknown, else degraded. */
 export function overallHealth(parts: Health[]): Health {
@@ -85,23 +85,32 @@ export class StatusMonitor extends EventEmitter {
     return this.status
   }
 
-  async refresh(): Promise<AppStatus> {
-    const [proxyInfo, compressorInfo, clientList] = await Promise.all([
-      this.sources.proxyInfo(),
-      this.sources.compressorInfo(),
+  /** onStep reports each component as it is checked, for a manual check the user watches. */
+  async refresh(onStep?: (progress: CheckProgress) => void): Promise<AppStatus> {
+    const step = onStep ?? (() => {})
+    step({ step: 'proxy', state: 'running' })
+    step({ step: 'compressor', state: 'running' })
+    const checked = (name: 'proxy' | 'compressor', status: ComponentStatus): ComponentStatus => {
+      step({ step: name, state: 'done', health: status.health, detail: status.detail })
+      return status
+    }
+    const [[proxyInfo, proxy], [compressorInfo, compressor], clientList] = await Promise.all([
+      this.sources.proxyInfo().then(async (info) => [info, checked('proxy', await this.sources.proxy(info))] as const),
+      this.sources.compressorInfo().then(async (info) => [info, checked('compressor', await this.sources.compressor(info))] as const),
       this.sources.clients()
-    ])
-    const [proxy, compressor] = await Promise.all([
-      this.sources.proxy(proxyInfo),
-      this.sources.compressor(compressorInfo)
     ])
     let stats = this.status.stats // keep the last numbers if headroom blips
     if (compressor.health === 'ok') {
+      step({ step: 'stats', state: 'running' })
       try {
         stats = await this.sources.stats()
+        step({ step: 'stats', state: 'done', health: 'ok', detail: `${stats.recent.length} recent requests` })
       } catch {
         // stats are optional; health already says headroom answers
+        step({ step: 'stats', state: 'done', health: 'degraded', detail: 'headroom answered, but its statistics did not load' })
       }
+    } else {
+      step({ step: 'stats', state: 'skipped', detail: 'headroom is not answering' })
     }
     const clients = clientsStatus(clientList)
     this.status = {

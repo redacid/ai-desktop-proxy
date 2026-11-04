@@ -81,7 +81,7 @@ port>/v1`. Codex talks plain HTTP and WebSocket to it, so no certificate is invo
 | `compressors/headroom-service.ts` | `HeadroomService`: install/run headroom as a user service, external detection |
 | `compressors/headroom-options.ts` | headroom options: defaults, validation, mapping to `headroom proxy` flags and service environment, argument splitting |
 | `integrations/tools.ts` | Independent tool detection, durable update-check cadence, reviewable action plans, native plugin/RTK setup and verified RTK downloads; tool stats (`rtk gain` JSON; Ponytail's band ledger, or its `ponytail-gain` benchmark; Chisle's compress stats); client plugins (`PLUGINS`) uvx-run MCP servers (`MCP_SERVERS`) and npx-run ones (`NPX_SERVERS`: Context7, Codebase Memory) as tables; ccusage runs in the background with the pin from `ccusage.json` and its report is cached for 10 minutes |
-| `status.ts` | `StatusMonitor` (polling, combined health) and the status-line functions for each card |
+| `status.ts` | `StatusMonitor` (polling, combined health; `refresh(onStep)` reports each component for a manual check) and the status-line functions for each card |
 | `store.ts` | `AppStore`: `state.json` with settings and per-client `{ enabled, applied }` |
 | `settings.ts` | Validation of user settings |
 | `autostart.ts` | XDG autostart entry |
@@ -98,6 +98,7 @@ it is defined there.
 |---|---|---|
 | `status:get`, `status:refresh` | invoke | → `AppStatus` |
 | `status:changed` | main → renderer | `AppStatus` after every check |
+| `status:check-progress` | main → renderer | `CheckProgress` for each step of a `status:refresh` (clients, proxy, compressor, stats), sent only to the window that asked |
 | `client:set-enabled` | invoke | `(id, enabled)` → `ActionResult` |
 | `proxy:action`, `compressor:action` | invoke | `install \| setup \| start \| stop \| restart \| remove` → `ActionResult` |
 | `proxy:logs`, `compressor:logs` | invoke | → last 80 journal lines |
@@ -107,6 +108,10 @@ it is defined there.
 | `tools:get`, `tools:check` | invoke | → `ToolInfo[]` (cached state / forced registry and installation check) |
 | `tools:action` | invoke | `(ToolId, ToolAction)` → `ToolActionResult`, after a native confirmation |
 | `tools:changed` | main → renderer | `ToolInfo[]` after a check or action |
+
+The Overview's request-path diagram is renderer-only: `renderer/src/routes.ts` derives each client's route
+(compressed, uncompressed through the proxy, direct) from `AppStatus`, and `Flow.tsx` draws the paths over the cards
+from their measured positions.
 
 Recent requests travel with `AppStatus.stats.recent` as metrics only; bodies are fetched on demand through
 `compressor:request-detail`, because they can be large and are only kept when headroom runs with `--log-messages`.

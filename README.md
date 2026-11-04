@@ -95,7 +95,7 @@ Developer documentation (`docs-dev/`, not published):
 
 ## Status
 
-Done: Claude Code and Codex clients, mitmproxy service with headroom fallback, headroom service with its options in Settings,
+Done: Claude Code and Codex clients, Overview drawn as the live request path with its fallbacks, step-by-step "Check now", mitmproxy service with headroom fallback, headroom service with its options in Settings,
 statistics with expandable recent requests, approved tool installation/update checks and RTK client connections, settings,
 start at login. Illustrated documentation builds into GitHub Pages on release. GitHub CI validates every push; version tags publish deb/rpm releases. Not yet: package installation smoke tests, Cursor client, macOS.
 Planned headroom improvements: diagnostics, quotas, detailed savings, CCR inspection and tuning; see [the roadmap](docs-dev/roadmap.md).

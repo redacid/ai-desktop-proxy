@@ -2,7 +2,8 @@
 
 The four tabs separate daily monitoring from configuration. The dot next to the application title and on
 **Overview** reports overall health: green is healthy, amber needs attention, red means a component is down,
-and grey means it has not been checked. **Check now** refreshes status immediately.
+and grey means it has not been checked. **Check now** checks everything immediately, shows each step while it runs
+and what it found when it finishes.
 
 These screenshots show the real application UI with fixed demonstration data. The `/home/demo` paths, savings
 and tool versions are examples, not measurements from your computer. Screenshots were captured in the light theme;
@@ -10,13 +11,19 @@ the app also follows your system's dark theme. Select a screenshot to open it at
 
 ## Overview: keep the request path healthy
 
-[![Overview tab: proxy and compressor service controls, plus per-client routing switches](images/overview.png)](images/overview.png)
+[![Overview tab: clients, proxy, headroom and the AI provider in request order, with the paths between them](images/overview.png)](images/overview.png)
+
+The cards follow a request from left to right: Clients, Proxy, Compressor (headroom), AI provider. Moving dots show
+the paths in use now; the dashed lines below the cards are the fallbacks: proxy straight to the provider when
+headroom is down, and clients straight to the provider when they are not routed or the proxy is down. See
+[the request path](user-guide.md#overview-the-request-path).
 
 | Area | What it tells you | What to do |
 |---|---|---|
+| Clients | Whether Claude Code and Codex are routed through the proxy | Switch a client on, then start a new client session to use the settings |
 | Proxy (mitmproxy) | Whether the proxy is listening, and whether its service matches the current configuration | Install or set up on first use; Apply when outdated; Logs for diagnostics |
 | Compressor (headroom) | Whether headroom answers and whether this app manages it | Start the app-managed service; an external service is reported and left alone |
-| Clients | Whether Claude Code and Codex are routed through the proxy | Switch a client on, then start a new client session to use the settings |
+| AI provider | Which provider each client talks to, and which path its requests take | Nothing; it follows the other cards |
 | Restart / Stop / Remove | Controls for that service | Stop removes client routing before stopping the proxy. Remove also deletes the service unit |
 
 The proxy uses port **8877** for Claude Code and **8878** for Codex by default. headroom normally uses **6767**.

@@ -37,8 +37,25 @@ tooltip. The dot next to the title and the tray icon colour show the overall sta
 While the app installs, starts or stops a service, the tray icon turns blue and pulses (the chevrons squeeze the
 dot) until the action finishes.
 
-The window polls every 5 s while it is visible and every 30 s while it sits in the tray. **Check now** forces a
-check.
+The window polls every 5 s while it is visible and every 30 s while it sits in the tray. **Check now** checks
+everything right away and shows each step while it runs: the client configs, the proxy, headroom's health and its
+statistics. When it finishes it shows what it found, for example "All good" or which part needs attention. The panel
+closes by itself after a few seconds.
+
+### Overview: the request path
+
+The Overview tab lays the cards out in the order a request travels: **Clients → Proxy (mitmproxy) → Compressor
+(headroom) → AI provider**. Lines between the cards show the paths; moving dots mark the ones in use right now, and
+paths not in use stay as faint dashes:
+
+| Path | When it is used |
+|---|---|
+| Clients → Proxy → headroom → provider (green) | A routed client while the proxy and headroom both answer: requests are compressed |
+| Proxy → provider, below the cards (amber) | headroom does not answer: the proxy sends requests straight to the provider, uncompressed, and clients keep working |
+| Clients → provider, along the bottom (grey) | A client that is not routed, or every client while the proxy is down (the app removes their proxy settings) |
+
+The **AI provider** card lists, for each client, which provider it talks to and which path its requests take. In a
+narrow window the cards stack and the fallback paths run along the right side.
 
 ### Proxy (mitmproxy)
 

@@ -227,6 +227,15 @@ export interface ActionResult {
   status: AppStatus
 }
 
+/** One step of a manual "Check now", reported while it runs. */
+export type CheckStep = 'clients' | 'proxy' | 'compressor' | 'stats'
+export interface CheckProgress {
+  step: CheckStep
+  state: 'running' | 'done' | 'skipped'
+  health?: Health
+  detail?: string
+}
+
 export const IPC = {
   getUpdate: 'update:get',
   updateAction: 'update:action',
@@ -235,6 +244,7 @@ export const IPC = {
   getStatus: 'status:get',
   refreshStatus: 'status:refresh',
   statusChanged: 'status:changed',
+  checkProgress: 'status:check-progress',
   setClientEnabled: 'client:set-enabled',
   proxyAction: 'proxy:action',
   proxyLogs: 'proxy:logs',
@@ -270,6 +280,7 @@ export interface Api {
   toolAction(id: ToolId, action: ToolAction): Promise<ToolActionResult>
   onTools(listener: (tools: ToolInfo[]) => void): () => void
   onStatus(listener: (status: AppStatus) => void): () => void
+  onCheckProgress(listener: (progress: CheckProgress) => void): () => void
   onInstallLog(listener: (line: string) => void): () => void
 }
 

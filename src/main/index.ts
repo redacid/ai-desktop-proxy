@@ -7,6 +7,7 @@ import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electr
 import {
   IPC,
   type ActionResult,
+  type CheckProgress,
   type CompressorAction,
   type ProxyAction,
   type UserSettings,
@@ -26,7 +27,7 @@ import { defaultUnitFile, ProxyManager } from './proxy/manager'
 import { findUv, PortTakenError, userUnitFile } from './proxy/tools'
 import { isPortListening } from './proxy-env'
 import { normalizeUrl, validateSettings } from './settings'
-import { compressorStatus, proxyStatus, StatusMonitor } from './status'
+import { clientsStatus, compressorStatus, proxyStatus, StatusMonitor } from './status'
 import { LEGACY_AUTOSTART, LEGACY_HEADROOM_UNIT, LEGACY_PROXY_UNIT, LEGACY_SLUG, migrateUserData } from './rename'
 import { AppStore } from './store'
 import { AppTray } from './tray'
@@ -406,9 +407,13 @@ if (!app.requestSingleInstanceLock()) {
     void appUpdates.start().catch((err) => console.error('App update check failed:', err))
 
     ipcMain.handle(IPC.getStatus, () => monitor.current)
-    ipcMain.handle(IPC.refreshStatus, async () => {
-      await clients.checkNow()
-      return monitor.refresh()
+    ipcMain.handle(IPC.refreshStatus, async (e) => {
+      const step = (progress: CheckProgress): void => { if (!e.sender.isDestroyed()) e.sender.send(IPC.checkProgress, progress) }
+      step({ step: 'clients', state: 'running' })
+      const list = await clients.checkNow()
+      const summary = clientsStatus(list)
+      step({ step: 'clients', state: 'done', health: summary.health, detail: summary.detail })
+      return monitor.refresh(step)
     })
     ipcMain.handle(IPC.setClientEnabled, (_e, id: string, enabled: boolean) => setClientEnabled(id, enabled))
     ipcMain.handle(IPC.proxyAction, (_e, action: ProxyAction) => proxyAction(action))

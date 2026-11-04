@@ -11,6 +11,9 @@ import type {
   ProxyInfo,
   UserSettings
 } from '@shared/ipc'
+import { CheckNow } from './CheckNow'
+import { Flow } from './Flow'
+import { flowState, ROUTE_LABEL } from './routes'
 import { HeadroomSettings } from './HeadroomSettings'
 import { RecentRequests } from './RecentRequests'
 import { Tools } from './Tools'
@@ -329,6 +332,7 @@ export function App(): React.JSX.Element {
   }
 
   if (!status) return <main className="loading">Loading…</main>
+  const flow = flowState(status)
 
   return (
     <main>
@@ -347,7 +351,7 @@ export function App(): React.JSX.Element {
           <p className="subtitle">{SUMMARY[status.overall]}</p>
         </div>
         <div className="top-actions">
-          <button onClick={() => void window.api.refreshStatus().then(setStatus)}>↻ Check now</button>
+          <CheckNow onStatus={setStatus} />
         </div>
       </header>
       <nav className="tabs" role="tablist">
@@ -370,40 +374,52 @@ export function App(): React.JSX.Element {
       {tab === 'settings' && (
         <SettingsPanel onSaved={setStatus} headroomExternal={status.compressorInfo?.managed === 'external'} />
       )}
-      {tab === 'overview' && <div className="grid">
-        <Card title="Proxy (mitmproxy)" status={status.proxy}>
-          {status.proxyInfo && (
-            <ServiceControls
-              buttons={proxyButtons(status.proxyInfo)}
-              showLogs={status.proxyInfo.unit !== 'missing'}
-              loadLogs={() => window.api.proxyLogs()}
-              busy={busyAction?.target === 'proxy' ? busyAction.action : busyAction || toolBusy ? 'start' : null}
-              onAction={(a) => void runAction('proxy', a)}
-              note={status.proxyInfo.listening && status.compressor.health === 'down'
-                ? 'headroom is down: API requests go straight to Anthropic and OpenAI, without compression.'
-                : null}
-            />
-          )}
-        </Card>
-        <Card title="Compressor (headroom)" status={status.compressor}>
-          {status.compressorInfo && (
-            <ServiceControls
-              buttons={compressorButtons(status.compressorInfo)}
-              showLogs={status.compressorInfo.unit !== 'missing'}
-              loadLogs={() => window.api.compressorLogs()}
-              busy={busyAction?.target === 'compressor' ? busyAction.action : busyAction || toolBusy ? 'start' : null}
-              onAction={(a) => void runAction('compressor', a)}
-            />
-          )}
-        </Card>
-        <Card title="Clients" status={status.clients}>
-          <ul className="clients">
-            {status.clientList.map((c) => (
-              <Client key={c.id} client={c} busy={busy || toolBusy || busyAction !== null} onToggle={(on) => void toggle(c.id, on)} />
-            ))}
-          </ul>
-        </Card>
-      </div>}
+      {tab === 'overview' && <>
+        <Flow flow={flow}>
+          <Card title="Clients" status={status.clients}>
+            <ul className="clients">
+              {status.clientList.map((c) => (
+                <Client key={c.id} client={c} busy={busy || toolBusy || busyAction !== null} onToggle={(on) => void toggle(c.id, on)} />
+              ))}
+            </ul>
+          </Card>
+          <Card title="Proxy (mitmproxy)" status={status.proxy}>
+            {status.proxyInfo && (
+              <ServiceControls
+                buttons={proxyButtons(status.proxyInfo)}
+                showLogs={status.proxyInfo.unit !== 'missing'}
+                loadLogs={() => window.api.proxyLogs()}
+                busy={busyAction?.target === 'proxy' ? busyAction.action : busyAction || toolBusy ? 'start' : null}
+                onAction={(a) => void runAction('proxy', a)}
+                note={status.proxyInfo.listening && status.compressor.health === 'down'
+                  ? 'headroom is down: API requests go straight to Anthropic and OpenAI, without compression.'
+                  : null}
+              />
+            )}
+          </Card>
+          <Card title="Compressor (headroom)" status={status.compressor}>
+            {status.compressorInfo && (
+              <ServiceControls
+                buttons={compressorButtons(status.compressorInfo)}
+                showLogs={status.compressorInfo.unit !== 'missing'}
+                loadLogs={() => window.api.compressorLogs()}
+                busy={busyAction?.target === 'compressor' ? busyAction.action : busyAction || toolBusy ? 'start' : null}
+                onAction={(a) => void runAction('compressor', a)}
+              />
+            )}
+          </Card>
+          <section className="card provider">
+            <header><h2>AI provider</h2></header>
+            <p className="detail">Anthropic: api.anthropic.com</p>
+            <p className="detail">OpenAI: api.openai.com, chatgpt.com</p>
+            <ul className="routes">
+              {flow.routes.filter((r) => r.route !== 'none').map((r) => (
+                <li key={r.id} className={r.route}><strong>{r.name}</strong> → {r.provider}: {ROUTE_LABEL[r.route]}</li>
+              ))}
+            </ul>
+          </section>
+        </Flow>
+      </>}
       {/* Kept mounted so a running tool action and its state survive switching tabs. */}
       <div hidden={tab !== 'tools'}>
         <Tools disabled={busy || toolBusy || busyAction !== null} onBusy={setToolBusy} onLogStart={() => { setInstallLog([]) }}

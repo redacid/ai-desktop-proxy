@@ -205,3 +205,53 @@ button.danger { color: var(--down); border-color: color-mix(in srgb, var(--down)
 .app-updates progress { width: 100%; accent-color: var(--accent); }
 .badge.version { font-size: 11px; font-weight: normal; align-self: center; }
 .badge.update-badge { cursor: pointer; border: 1px solid var(--accent); color: var(--accent); background: transparent; }
+
+/* Overview: cards in request order, with the paths between them drawn on top. */
+.flow { position: relative; display: grid; gap: 16px; }
+.flow-row { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 0.85fr); column-gap: 56px; padding-bottom: 66px; }
+.flow-column { grid-template-columns: minmax(0, 1fr); row-gap: 30px; padding-right: 54px; }
+.flow-node { display: flex; min-width: 0; }
+.flow-node > .card { flex: 1; min-width: 0; }
+.flow-lines { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.flow-path .track { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.flow-path.idle .track { stroke: var(--border); stroke-dasharray: 4 5; }
+.flow-path.active .track { stroke-width: 2.5; }
+.flow-path.main.active .track { stroke: color-mix(in srgb, var(--ok) 35%, transparent); }
+.flow-path.bypass.active .track { stroke: color-mix(in srgb, var(--degraded) 40%, transparent); }
+.flow-path.direct.active .track { stroke: color-mix(in srgb, var(--muted) 40%, transparent); }
+.flow-path .dots { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 0 12; animation: flow-dots 0.8s linear infinite; }
+.flow-path.main .dots { stroke: var(--ok); }
+.flow-path.bypass .dots { stroke: var(--degraded); }
+.flow-path.direct .dots { stroke: var(--muted); }
+.flow-head.off { fill: var(--border); }
+.flow-head.main.on { fill: var(--ok); }
+.flow-head.bypass.on { fill: var(--degraded); }
+.flow-head.direct.on { fill: var(--muted); }
+.flow-path text { font-size: 11px; fill: var(--muted); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; }
+.flow-path.idle text { opacity: 0.75; }
+.flow-path.bypass.active text { fill: var(--degraded); }
+@keyframes flow-dots { to { stroke-dashoffset: -12; } }
+@media (prefers-reduced-motion: reduce) { .flow-path .dots { animation: none; } }
+.provider .routes { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.provider .routes li { padding-left: 10px; border-left: 3px solid var(--border); }
+.provider .routes li.compressed { border-color: var(--ok); }
+.provider .routes li.uncompressed { border-color: var(--degraded); }
+.provider .routes li.direct { border-color: var(--muted); }
+
+/* Check now: progress while it runs, the result after. */
+.check-now { position: relative; }
+.check-now > button { display: inline-flex; align-items: center; gap: 6px; }
+.spinner { width: 12px; height: 12px; border: 2px solid color-mix(in srgb, var(--accent) 25%, transparent); border-top-color: var(--accent); border-radius: 50%; display: inline-block; flex: none; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+.check-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; width: min(440px, calc(100vw - 32px)); background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow), 0 8px 24px rgb(0 0 0 / 12%); padding: 10px 12px; }
+.check-panel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.check-panel li { display: grid; grid-template-columns: 14px 1fr; column-gap: 8px; align-items: center; font-size: 13px; }
+.check-panel li .step-detail { grid-column: 2; color: var(--muted); font-size: 12px; }
+.check-panel li.skipped .step-label { color: var(--muted); }
+.step-icon { color: var(--muted); text-align: center; }
+.check-result { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--border); font-size: 13px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.check-result.ok { color: var(--ok); }
+.check-result.warn { color: var(--degraded); }
+.provider header { margin-bottom: 8px; }
+.provider .detail { margin: 2px 0; }
